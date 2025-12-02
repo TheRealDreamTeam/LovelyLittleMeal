@@ -1,0 +1,92 @@
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-12 col-md-8 col-lg-6">
+
+      <div class="card shadow-sm p-4">
+        <h2 class="mb-4 text-center">Edit your settings</h2>
+
+        <%= form_with model: @user, url: "/settings", method: :patch do |f| %>
+
+          <!-- Name -->
+          <div class="mb-3">
+            <%= f.label :name, class: "form-label" %>
+            <%= f.text_field :name, class: "form-control" %>
+          </div>
+
+          <!-- Appliances -->
+          <div class="mb-3">
+            <%= f.label :appliances, class: "form-label" %>
+            <%= f.text_field :appliances, class: "form-control" %>
+          </div>
+
+          <!-- Allergies -->
+          <div class="mb-3">
+            <%= f.label :allergies, class: "form-label" %>
+            <%= f.text_field :allergies, class: "form-control" %>
+          </div>
+
+          <!-- Preferences -->
+          <div class="mb-3">
+            <%= f.label :preferences, class: "form-label" %>
+            <%= f.text_area :preferences,
+                            rows: 3,
+                            class: "form-control",
+                            placeholder: "Example: I want to always use sweetener instead of cane sugar.." %>
+          </div>
+
+          <!-- Physicals (JSON: age, weight, gender) -->
+          <h5 class="mt-4 mb-2">Physical Information</h5>
+
+          <div class="mb-3">
+            <%= label_tag "user[physicals][age]", "Age", class: "form-label" %>
+            <%= number_field_tag "user[physicals][age]",
+                  @user.physicals&.dig("age"),
+                  class: "form-control" %>
+          </div>
+
+          <div class="mb-3">
+            <%= label_tag "user[physicals][weight]", "Weight (kg)", class: "form-label" %>
+            <%= number_field_tag "user[physicals][weight]",
+                  @user.physicals&.dig("weight"),
+                  class: "form-control" %>
+          </div>
+
+          <div class="mb-3">
+            <%= label_tag "user[physicals][gender]", "Gender", class: "form-label d-block" %>
+
+            <div class="form-check form-check-inline">
+              <%= radio_button_tag "user[physicals][gender]", "male",
+                    @user.physicals&.dig("gender") == "male",
+                    class: "form-check-input",
+                    id: "physicals_gender_male" %>
+              <%= label_tag "physicals_gender_male", "Male", class: "form-check-label" %>
+            </div>
+
+            <div class="form-check form-check-inline">
+              <%= radio_button_tag "user[physicals][gender]", "female",
+                    @user.physicals&.dig("gender") == "female",
+                    class: "form-check-input",
+                    id: "physicals_gender_female" %>
+              <%= label_tag "physicals_gender_female", "Female", class: "form-check-label" %>
+            </div>
+          </div>
+
+          <!-- System prompt -->
+          <div class="mb-4">
+            <%= f.label :system_prompt, class: "form-label" %>
+            <%= f.text_area :system_prompt,
+                  rows: 4,
+                  class: "form-control",
+                  placeholder: "Example: I want the chat-bot to be a professional cook, that knows all the variations of a given recipe.." %>
+          </div>
+
+          <div class="text-center">
+            <%= f.submit "Save settings", class: "btn btn-primary w-100" %>
+          </div>
+
+        <% end %>
+
+      </div>
+    </div>
+  </div>
+</div>
