@@ -9,4 +9,8 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
+
+  get  "/settings/edit", to: "users#edit"
+  patch "/settings", to: "users#update"
+
 end
