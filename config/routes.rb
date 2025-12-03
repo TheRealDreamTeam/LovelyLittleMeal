@@ -19,4 +19,10 @@ Rails.application.routes.draw do
       post :message  # POST /recipes/:id/message - send chat message
     end
   end
+
+  resources :recipes do
+    collection do
+      get :new_chat
+    end
+  end
 end
