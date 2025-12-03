@@ -18,6 +18,7 @@
     <%= f.text_field :content,
                      placeholder: "Type...",
                      autofocus: true,
+                     autocomplete: "off",
                      id: "message-content",
                      value: "" %>
     <%= f.submit "Send", class: "btn btn-primary send-button" %>
