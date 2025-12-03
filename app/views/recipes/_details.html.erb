@@ -1,4 +1,4 @@
-<div id="recipe-details">
+<div id="recipe-details" class="<%= 'has-content' if recipe.content.present? && recipe.content.is_a?(Hash) && recipe.content.any? %>">
   <%# Recipe Header %>
   <div class="mb-4">
     <div class="d-flex align-items-center gap-2 mb-2">
@@ -11,7 +11,6 @@
       <p class="text-muted lead mb-0"><%= recipe.description %></p>
     <% end %>
   </div>
-
   <%# Recipe Content %>
   <% if recipe.content.present? && recipe.content.is_a?(Hash) %>
     <%# Long Description %>
@@ -20,42 +19,47 @@
         <p class="mb-0"><%= simple_format(recipe.content["long_description"]) %></p>
       </div>
     <% end %>
-
-    <%# Ingredients Section %>
-    <% if recipe.content["ingredients"].present? && recipe.content["ingredients"].is_a?(Array) && recipe.content["ingredients"].any? %>
-      <div class="mb-4">
-        <h3 class="h5 mb-3">Ingredients</h3>
-        <ul class="list-unstyled">
-          <% recipe.content["ingredients"].each do |ingredient| %>
-            <li class="mb-2">
-              <span class="me-2">•</span>
-              <%= ingredient %>
-            </li>
-          <% end %>
-        </ul>
-      </div>
-    <% end %>
-
-    <%# Instructions Section %>
-    <% if recipe.content["instructions"].present? && recipe.content["instructions"].is_a?(Array) && recipe.content["instructions"].any? %>
-      <div class="mb-4">
-        <h3 class="h5 mb-3">Instructions</h3>
-        <ol class="ps-3">
-          <% recipe.content["instructions"].each do |instruction| %>
-            <li class="mb-3">
-              <%= simple_format(instruction) %>
-            </li>
-          <% end %>
-        </ol>
+    <%# Ingredients and Instructions - Side by Side %>
+    <% has_ingredients = recipe.content["ingredients"].present? && recipe.content["ingredients"].is_a?(Array) && recipe.content["ingredients"].any? %>
+    <% has_instructions = recipe.content["instructions"].present? && recipe.content["instructions"].is_a?(Array) && recipe.content["instructions"].any? %>
+    
+    <% if has_ingredients || has_instructions %>
+      <div class="mb-4 d-flex flex-column flex-md-row gap-4">
+        <%# Ingredients Section %>
+        <% if has_ingredients %>
+          <div class="flex-grow-1" style="min-width: 0;">
+            <h3 class="h5 mb-3">Ingredients</h3>
+            <ul class="list-unstyled">
+              <% recipe.content["ingredients"].each do |ingredient| %>
+                <li class="mb-2">
+                  <span class="me-2">•</span>
+                  <%= ingredient %>
+                </li>
+              <% end %>
+            </ul>
+          </div>
+        <% end %>
+        
+        <%# Instructions Section %>
+        <% if has_instructions %>
+          <div class="flex-grow-1" style="min-width: 0;">
+            <h3 class="h5 mb-3">Instructions</h3>
+            <ol>
+              <% recipe.content["instructions"].each do |instruction| %>
+                <li class="mb-3">
+                  <%= simple_format(instruction) %>
+                </li>
+              <% end %>
+            </ol>
+          </div>
+        <% end %>
       </div>
     <% end %>
   <% end %>
-
   <%# Shopping List Section %>
   <% if recipe.shopping_list.present? && recipe.shopping_list.is_a?(Array) && recipe.shopping_list.any? %>
     <%# Filter out invalid entries - only keep non-empty strings %>
     <% valid_items = recipe.shopping_list.select { |item| item.is_a?(String) && item.present? && item.strip.length > 0 } %>
-    
     <% if valid_items.any? %>
       <div class="mb-4">
         <h3 class="h5 mb-3">Shopping List</h3>
@@ -72,12 +76,12 @@
       </div>
     <% end %>
   <% end %>
-
   <%# Empty State %>
-  <% if (!recipe.content.present? || !recipe.content.is_a?(Hash) || recipe.content.empty?) && 
+  <% if (!recipe.content.present? || !recipe.content.is_a?(Hash) || recipe.content.empty?) &&
         (!recipe.shopping_list.present? || recipe.shopping_list.empty?) %>
-    <div class="text-center text-muted py-5">
-      <p class="mb-0">No recipe details yet. Start chatting to generate a recipe!</p>
-    </div>
-  <% end %>
+  <div class="text-center text-muted py-5">
+    <p class="mb-0">No recipe details yet. Start chatting to generate a recipe!</p>
+    <p class="mb-0">You can also paste a link to a recipe to validate if it fits your preferences.</p>
+  </div>
+<% end %>
 </div>
