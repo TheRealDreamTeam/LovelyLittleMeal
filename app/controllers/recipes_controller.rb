@@ -6,14 +6,14 @@ class RecipesController < ApplicationController
     Every time I tell you that I want to eat [insert any food] or I want a recipe for [insert any need] you will create a recipe for me taking into consideration that I am gluten intolerant, lactose intolerant, vegan, and just sligthly retarded.
     If I send a link instead you will visit the link and understand the recipe and then adjust it per my preferences. Same if I send a complete recipe.
   TEXT
+  DEFAULT_RECIPE_TITLE = "Untitled"
+  DEFAULT_RECIPE_DESCRIPTION = "Nothing here yet..."
 
   before_action :set_recipe, only: [:message]
 
   def new
     @chat = current_user.chats.build
-    @recipe = @chat.build_recipe
-    @recipe.title = "untitled"
-    @recipe.description = "Nothing here yet..."
+    @recipe = @chat.build_recipe(title: DEFAULT_RECIPE_TITLE, description: DEFAULT_RECIPE_DESCRIPTION)
     ActiveRecord::Base.transaction do
       if @chat.save && @recipe.save
         redirect_to recipe_path(@recipe)
@@ -40,28 +40,18 @@ class RecipesController < ApplicationController
       role: ROLE
     )
     response = process_prompt(@chat, @user_message)
-
-    # RubyLLM returns hash with string keys, so we can use it directly
     @ai_message = @chat.messages.create!(
       content: response["message"],
       role: "assistant"
     )
 
-    # Extract update attributes, excluding message field
-    # Response already has string keys from RubyLLM
-    update_attrs = response.except("message")
-
-    # Update recipe with the response data
-    # This will raise RecordInvalid if validation fails
-    @recipe.update!(update_attrs)
+    @recipe.update!(response.except("message"))
     @recipe.reload
     respond_to do |format|
       format.turbo_stream
       format.html { redirect_to @recipe }
     end
   rescue ActiveRecord::RecordInvalid => e
-    redirect_to recipe_path(@recipe), alert: "Failed to send message: #{e.message}"
-  rescue => e
     redirect_to recipe_path(@recipe), alert: "Failed to send message: #{e.message}"
   end
 
@@ -84,7 +74,7 @@ class RecipesController < ApplicationController
     # content is jsonb, so check if it has actual data beyond empty hash
     has_content = recipe &&
       recipe.description.present? &&
-      recipe.description != "Nothing here yet..." &&
+      recipe.description != DEFAULT_RECIPE_DESCRIPTION &&
       recipe.content.present? &&
       recipe.content.is_a?(Hash) &&
       recipe.content.any?

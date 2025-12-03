@@ -11,3 +11,8 @@ html, body {
   flex-direction: column;
 }
 
+// Hide default Turbo progress bar (we use custom loading indicator in chat)
+.turbo-progress-bar {
+  display: none !important;
+}
+
