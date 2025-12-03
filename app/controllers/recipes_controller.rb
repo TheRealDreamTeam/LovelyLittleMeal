@@ -32,6 +32,10 @@ class RecipesController < ApplicationController
     @messages = @chat.messages.order(:created_at)
   end
 
+  def index
+    @recipes = current_user.recipes
+  end
+
   def message
     @chat = @recipe.chat
 

@@ -24,7 +24,7 @@ before_action :authenticate_user!
     end
 
     if @user.update(permitted)
-      redirect_to user_recipes_path, notice: "Settings updated."
+      redirect_to recipes_path, notice: "Settings updated"
     else
       render :edit, status: :unprocessable_entity
     end
