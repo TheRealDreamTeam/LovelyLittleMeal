@@ -1,4 +1,6 @@
 class RecipesController < ApplicationController
+  before_action :set_recipe, only: %i[message destroy]
+
   ROLE = "user"
   DEFAULT_RECIPE_TITLE = "Untitled"
   DEFAULT_RECIPE_DESCRIPTION = "Nothing here yet..."
@@ -14,20 +16,6 @@ class RecipesController < ApplicationController
     "fryer" => "Fryer",
     "food_processor" => "Food processor"
   }.freeze
-
-  # Fixed list of available appliances - user selects from these options
-  # Any appliance not selected is considered unavailable and must NOT be used in recipes
-  AVAILABLE_APPLIANCES = {
-    "stove" => "Stove",
-    "oven" => "Oven",
-    "microwave" => "Microwave",
-    "pan" => "Pan",
-    "kettle" => "Kettle",
-    "fryer" => "Fryer",
-    "food_processor" => "Food processor"
-  }.freeze
-
-  before_action :set_recipe, only: %i[message destroy]
 
   def new
     @recipe = Recipe.new(title: DEFAULT_RECIPE_TITLE, description: DEFAULT_RECIPE_DESCRIPTION)
