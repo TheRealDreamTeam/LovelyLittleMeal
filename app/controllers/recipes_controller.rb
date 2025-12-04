@@ -36,6 +36,7 @@ class RecipesController < ApplicationController
               .destroy_all
 
     @recipes = current_user.recipes
+                           .order(favorite: :desc, created_at: :desc)
   end
 
   def message
