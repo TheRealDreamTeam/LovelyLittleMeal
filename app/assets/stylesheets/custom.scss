@@ -6,10 +6,11 @@ html, body {
   overflow: hidden; // Prevent body scroll
 }
 
-// Ensure main content area can use flexbox properly
+// Ensure main content area can use flexbox properly and fills available height
 #main-content {
   display: flex;
   flex-direction: column;
+  min-height: 0; // Allow flex children to shrink below content size
 }
 
 // Hide default Turbo progress bar (we use custom loading indicator in chat)

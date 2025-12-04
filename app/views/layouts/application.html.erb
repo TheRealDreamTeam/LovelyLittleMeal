@@ -13,10 +13,11 @@
     <header class="flex-shrink-0">
       <%= render "shared/navbar" %>
     </header>
-    <main id="main-content" class="flex-grow-1 overflow-hidden">
-      <%= yield %>
-      <p class="notice"><%= notice %></p>
-      <p class="alert"><%= alert %></p>
+    <main id="main-content" class="flex-grow-1 overflow-hidden d-flex flex-column">
+      <div class="flex-grow-1 overflow-hidden" style="min-height: 0;">
+        <%= yield %>
+      </div>
     </main>
+    <%= render "shared/flashes" %>
   </body>
 </html>
