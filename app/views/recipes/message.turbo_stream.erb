@@ -15,9 +15,12 @@
   <%= render "messages/message", message: @ai_message %>
 <% end %>
 
-<%# Update recipe details section with new recipe data %>
-<%= turbo_stream.replace "recipe-details" do %>
-  <%= render "recipes/details", recipe: @recipe %>
+<%# Update recipe details section ONLY if recipe actually changed %>
+<%# For questions, the recipe stays the same so we don't need to update the view %>
+<% if @recipe_changed %>
+  <%= turbo_stream.replace "recipe-details" do %>
+    <%= render "recipes/details", recipe: @recipe %>
+  <% end %>
 <% end %>
 
 <%# Clear the message input form and reset it %>
