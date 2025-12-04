@@ -1,40 +1,42 @@
-<div class="d-flex p-3 gap-3" style="height: calc(100vh - 120px); min-height: 600px;">
-  <%# Recipe section - scrollable when content overflows %>
-  <div class="flex-grow-1 d-flex flex-column bg-white p-3 overflow-hidden" style="min-height: 0; border-radius: 12px;">
-    <div id="recipe-details" class="overflow-y-auto flex-grow-1" style="min-height: 0; max-height: 100%;">
-      <%= render "recipes/details", recipe: @recipe %>
-    </div>
+<% left_content = capture do %>
+  <div id="recipe-details" class="overflow-y-auto flex-grow-1" style="min-height: 0; max-height: 100%;">
+    <%= render "recipes/details", recipe: @recipe %>
   </div>
-  <%# Chat section - fixed height with scrollable messages and fixed form at bottom %>
-  <div style="min-width: 450px; width: 450px; max-width: 450px; border-radius: 12px;" class="d-flex flex-column bg-white p-3 overflow-hidden" data-controller="chat">
-    <div id="chat-messages" class="overflow-y-auto flex-grow-1 mb-3 d-flex flex-column" style="min-height: 0; justify-content: flex-end;" data-chat-target="messages">
-      <%# Initial messages or empty state %>
-      <% if @messages.any? %>
-        <%= render @messages %>
-      <% else %>
-        <div id="empty-chat-message" class="d-flex align-items-center justify-content-center flex-grow-1">
-          <p class="text-muted mb-0">What are we cooking today?</p>
-        </div>
-      <% end %>
-    </div>
-    <%# Separator between messages and input %>
-    <div class="border-top mb-3 flex-shrink-0"></div>
-    <div id="message-form" class="flex-shrink-0" data-chat-target="form">
-      <%= form_with url: message_recipe_path(@recipe),
-                    method: :post,
-                    class: "d-flex gap-2",
-                    data: {
-                      turbo_frame: "_top"
-                    } do |f| %>
-        <%= f.text_field :content,
-                         placeholder: "Type...",
-                         autofocus: true,
-                         autocomplete: "off",
-                         id: "message-content",
-                         class: "form-control flex-grow-1",
-                         data: { chat_target: "input" } %>
-        <%= f.submit "Send", class: "btn btn-primary flex-shrink-0", data: { chat_target: "submit" }, disabled: true %>
-      <% end %>
-    </div>
+<% end %>
+
+<% right_content = capture do %>
+  <div id="chat-messages" class="overflow-y-auto flex-grow-1 mb-3 d-flex flex-column" style="min-height: 0; justify-content: flex-end;" data-chat-target="messages">
+    <%# Initial messages or empty state %>
+    <% if @messages.any? %>
+      <%= render @messages %>
+    <% else %>
+      <div id="empty-chat-message" class="d-flex align-items-center justify-content-center flex-grow-1">
+        <p class="text-muted mb-0">What are we cooking today?</p>
+      </div>
+    <% end %>
   </div>
-</div>
+  <%# Separator between messages and input %>
+  <div class="border-top mb-3 flex-shrink-0"></div>
+  <div id="message-form" class="flex-shrink-0" data-chat-target="form">
+    <%= form_with url: message_recipe_path(@recipe),
+                  method: :post,
+                  class: "d-flex gap-2",
+                  data: {
+                    turbo_frame: "_top"
+                  } do |f| %>
+      <%= f.text_field :content,
+                       placeholder: "Type...",
+                       autofocus: true,
+                       autocomplete: "off",
+                       id: "message-content",
+                       class: "form-control flex-grow-1",
+                       data: { chat_target: "input" } %>
+      <%= f.submit "Send", class: "btn btn-primary flex-shrink-0", data: { chat_target: "submit" }, disabled: true %>
+    <% end %>
+  </div>
+<% end %>
+
+<%= render "recipes/two_column_layout", 
+    left_content: left_content, 
+    right_content: right_content,
+    right_attributes: { data: { controller: "chat" } } %>
