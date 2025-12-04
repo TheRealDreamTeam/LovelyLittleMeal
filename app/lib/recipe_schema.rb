@@ -9,15 +9,19 @@ class RecipeSchema < RubyLLM::Schema
   string :description, description: "A short, colorful description of the recipe to hook the reader"
 
   object :content do
-    string :long_description, description: "A longer description of the recipe, written in a professional yet friendly tone"
-    array :ingredients, of: :string, description: "A list of ingredients needed, with quantities in metric units (e.g., '200g flour')"
+    string :long_description,
+           description: "A longer description of the recipe, written in a professional yet friendly tone"
+    array :ingredients, of: :string,
+                        description: "A list of ingredients needed, with quantities in metric units (e.g., '200g ingredient')"
     array :instructions, of: :string, description: "A numbered list of step-by-step instructions to prepare the recipe"
   end
 
-  array :shopping_list, of: :string, description: "A simple array of shopping items, each as a string with quantity and item name together. Example: [\"200g flour\", \"50g sugar\", \"2 ripe bananas\", \"15ml coconut oil\"]. Always include the quantity with metric units in each string."
+  array :shopping_list, of: :string,
+                        description: "A simple array of shopping items, each as a string with quantity and item name together. Example: [\"200g ingredient\", \"50g another ingredient\", \"2 pieces of produce\", \"15ml liquid\"]. Always include the quantity with metric units in each string."
 
-  string :recipe_summary_for_prompt, description: "A concise text summary of the recipe, suitable for feeding into future prompts for recommendations"
+  string :recipe_summary_for_prompt,
+         description: "A concise text summary of the recipe, suitable for feeding into future prompts for recommendations"
 
-  string :message, description: "A short, in-character message to the user about the created recipe"
+  string :message,
+         description: "A warm, encouraging message from a friendly chef persona about the created recipe. Structure: (1) Friendly introduction, (2) Factual mention of ONLY actual adjustments made if any (allergies removed/substituted, preference-based changes, appliance adaptations), (3) Encouraging closing. CRITICAL: Do NOT mention making a recipe 'nut-free' or 'allergen-free' if the original already didn't contain those allergens - only mention if you actually removed something. Do NOT mention 'used your available appliances' or 'aligned with preferences' if no changes were made. Only state what was changed, never what already matched. If no adjustments were needed, present the recipe warmly without mentioning adjustments/preferences/appliances/allergies."
 end
-
