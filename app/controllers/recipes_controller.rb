@@ -3,6 +3,18 @@ class RecipesController < ApplicationController
   DEFAULT_RECIPE_TITLE = "Untitled"
   DEFAULT_RECIPE_DESCRIPTION = "Nothing here yet..."
 
+  # Fixed list of available appliances - user selects from these options
+  # Any appliance not selected is considered unavailable and must NOT be used in recipes
+  AVAILABLE_APPLIANCES = {
+    "stove" => "Stove",
+    "oven" => "Oven",
+    "microwave" => "Microwave",
+    "pan" => "Pan",
+    "kettle" => "Kettle",
+    "fryer" => "Fryer",
+    "food_processor" => "Food processor"
+  }.freeze
+
   before_action :set_recipe, only: [:message]
 
   def new
@@ -51,9 +63,13 @@ class RecipesController < ApplicationController
       role: "assistant"
     )
 
-    # Update recipe with AI response (shopping_list is already an array of strings from RecipeSchema)
-    @recipe.update!(response.except("message"))
-    @recipe.reload
+    # Only update recipe if there are actual changes to the recipe data
+    # If user is just asking a question, the AI should return the same recipe data unchanged
+    recipe_data = response.except("message")
+    if recipe_data_changed?(@recipe, recipe_data)
+      @recipe.update!(recipe_data)
+      @recipe.reload
+    end
 
     respond_to do |format|
       format.turbo_stream
@@ -100,13 +116,21 @@ class RecipesController < ApplicationController
 
       RECIPE GENERATION WORKFLOW - Follow these steps to ensure quality:
 
-      STEP 1: RECEIVE AND ANALYZE USER INPUT
-      - If the user provides a link: Visit the page, read the recipe thoroughly, extract all ingredients and steps, then proceed to recipe processing
-      - If the user provides free text (recipe request or description): Generate an initial recipe idea based on the request, list all ingredients and steps, then proceed to recipe processing
-      - If the user provides a complete recipe: Extract all ingredients and steps, then proceed to recipe processing
-      - If this is a recipe modification/reiteration (existing recipe being updated): Carefully read the current recipe, understand what the user is requesting to change, and make those specific modifications. ALWAYS follow the user's explicit requests - if they ask to add an ingredient, add it. If they ask to modify something, modify it exactly as requested.
+      STEP 1: RECEIVE AND ANALYZE USER INPUT - CLASSIFY INTENT FIRST
+      ⚠️ CRITICAL: You MUST classify the user's intent before proceeding:
+
+      - If this is a NEW recipe request (no existing recipe context): The user provides a link, free text recipe request, or complete recipe. Extract all ingredients and steps, then proceed to STEP 2 (recipe processing).
+
+      - If this is about an EXISTING recipe (you have current recipe data in the prompt):
+        * FIRST: Check if the user is asking a QUESTION (e.g., "How long?", "What can I substitute?", "Is this spicy?", "Will this cook?", "Are the pancakes going to cook?")
+          → If QUESTION: Answer the question in your message, return EXACT same recipe data unchanged, and STOP - do NOT proceed to STEP 2
+        * SECOND: Check if the user is requesting a CHANGE (e.g., "add salt", "reduce time", "make vegetarian")
+          → If CHANGE REQUEST: Make the requested modifications, then proceed to STEP 2 (recipe processing)
+
+      - For recipe modifications: Carefully read the current recipe, understand what the user is requesting to change, and make those specific modifications. ALWAYS follow the user's explicit requests.
 
       STEP 2: RECIPE PROCESSING - QUALITY ASSURANCE CHECKLIST
+      ⚠️ NOTE: Skip this step entirely if the user asked a QUESTION about an existing recipe (questions should only return a message, not process the recipe).
       Follow these steps in order to ensure the recipe meets all requirements:
 
       2.1 ALLERGY COMPLIANCE CHECK (CRITICAL - NON-NEGOTIABLE):
@@ -123,11 +147,13 @@ class RecipesController < ApplicationController
       - Ensure all preference requirements are met without compromise
       - Document what was changed for transparency
 
-      2.3 APPLIANCE COMPATIBILITY CHECK:
-      - Review all cooking methods against the user's available appliances
-      - If the recipe requires unavailable appliances: Adapt cooking methods to use only available appliances
-      - Ensure the recipe is fully executable with the user's equipment
-      - Document any cooking method adaptations for transparency
+      2.3 APPLIANCE COMPATIBILITY CHECK (CRITICAL - MANDATORY):
+      - Review ALL cooking methods and instructions against the user's available AND unavailable appliances
+      - If the recipe requires ANY unavailable appliance: You MUST completely rebuild or adapt the recipe to use ONLY available appliances
+      - This is MANDATORY and NON-NEGOTIABLE - recipes that require unavailable appliances are NOT acceptable
+      - If a recipe cannot be made with available appliances, you MUST find alternative cooking methods or rebuild the recipe entirely
+      - The recipe MUST be fully executable using ONLY the user's available equipment - no exceptions
+      - Document any cooking method adaptations or recipe rebuilds for transparency
 
       2.4 INGREDIENT VERIFICATION:
       - Verify all ingredients are accessible and commonly available
@@ -165,6 +191,7 @@ class RecipesController < ApplicationController
       1. Start with an encouraging, friendly introduction about the recipe
       2. If you made actual adjustments, mention them factually and specifically
       3. End with an encouraging note about enjoying the recipe
+      4. Add a line break, then add: "Tell me what to change next"
 
       Rules for mentioning adjustments (ONLY mention if you actually made changes):
       - If you removed or substituted allergy ingredients FROM THE ORIGINAL RECIPE: State which ingredients were avoided and what substitutes were used (e.g., "I've removed [allergen ingredient] and used [substitute] instead to keep it safe for you")
@@ -235,18 +262,52 @@ class RecipesController < ApplicationController
       TEXT
     end
 
-    # Build appliances section
-    appliances = parse_user_field(user.appliances)
-    if appliances.any?
-      appliances_list = appliances.map { |a| "- #{a.capitalize.tr('_', ' ')}" }.join("\n")
-      sections << <<~TEXT
-        AVAILABLE APPLIANCES:
-        The user has access to the following cooking appliances:
-        #{appliances_list}
+    # Build appliances section with strict enforcement
+    # Fixed appliance list - any appliance not selected is unavailable
+    user_appliances = parse_user_field(user.appliances)
+    available_appliances = user_appliances.map { |a| a.downcase.strip }
 
-        When creating recipes, prioritize methods that use these available appliances. If a recipe requires an appliance the user doesn't have, suggest alternative methods using the user's available equipment.
-      TEXT
-    end
+    # Calculate unavailable appliances (all appliances not in the user's selection)
+    unavailable_appliances = AVAILABLE_APPLIANCES.keys.reject { |key| available_appliances.include?(key.downcase) }
+
+    # Always show appliances section if there are any appliances in the system
+    # This ensures clear communication about what's available vs unavailable
+    available_list = if available_appliances.any?
+                       available_appliances.map do |a|
+                         "- #{AVAILABLE_APPLIANCES[a] || a.capitalize.tr('_', ' ')}"
+                       end.join("\n")
+                     else
+                       "- None (user has no appliances selected)"
+                     end
+
+    unavailable_list = if unavailable_appliances.any?
+                         unavailable_appliances.map do |a|
+                           "- #{AVAILABLE_APPLIANCES[a]}"
+                         end.join("\n")
+                       else
+                         "- None (user has all appliances available)"
+                       end
+
+    sections << <<~TEXT
+      APPLIANCE RESTRICTIONS (CRITICAL - MANDATORY COMPLIANCE):
+
+      AVAILABLE APPLIANCES (ONLY USE THESE):
+      The user has access to the following cooking appliances:
+      #{available_list}
+
+      UNAVAILABLE APPLIANCES (MUST NEVER USE THESE):
+      The user does NOT have access to the following appliances. These appliances MUST NEVER be used in any recipe, instruction, or cooking method:
+      #{unavailable_list}
+
+      CRITICAL RULES:
+      - You MUST ONLY use appliances from the AVAILABLE list above
+      - You MUST NEVER use any appliance from the UNAVAILABLE list above
+      - If a recipe requires an unavailable appliance, you MUST completely rebuild or adapt the recipe to use ONLY available appliances
+      - This is MANDATORY and NON-NEGOTIABLE - recipes that require unavailable appliances are NOT acceptable
+      - If a recipe cannot be made with available appliances, you MUST find alternative cooking methods or rebuild the recipe entirely
+      - The recipe MUST be fully executable using ONLY the user's available equipment - no exceptions
+      - Do NOT suggest using unavailable appliances as alternatives - they are completely off-limits
+    TEXT
 
     sections.join("\n\n")
   end
@@ -282,7 +343,7 @@ class RecipesController < ApplicationController
   def build_existing_recipe_prompt(recipe)
     <<~TEXT
 
-      IMPORTANT: This is a recipe modification/reiteration. The user wants to update an existing recipe.
+      ⚠️ CRITICAL: This is a conversation about an EXISTING recipe. You MUST classify the user's intent FIRST before doing anything else.
 
       Current Recipe:
       Title: #{recipe.title}
@@ -290,15 +351,125 @@ class RecipesController < ApplicationController
       Content: #{recipe.content}
       Shopping List: #{recipe.shopping_list}
 
-      CRITICAL INSTRUCTIONS FOR RECIPE MODIFICATIONS:
-      - You MUST follow the user's explicit requests exactly as stated
+      ============================================================================
+      STEP 1: CLASSIFY USER INTENT (DO THIS FIRST - BEFORE ANYTHING ELSE)
+      ============================================================================
+
+      Read the user's message carefully and determine if they are:
+
+      A) ASKING A QUESTION (Examples: "How long does this take?", "What can I substitute?", "Is this spicy?", "Can I make this ahead?", "Will this cook properly?", "Are the pancakes going to cook?", "Do I need X?", "How do I...?", "What if I don't have...?", "Is this safe?", "Can I...?")
+         - Questions are inquiries about the recipe, cooking process, substitutions, timing, etc.
+         - Questions do NOT request changes to the recipe
+         - Questions often start with: How, What, When, Where, Why, Is, Are, Can, Will, Do, Does
+
+      B) REQUESTING A CHANGE (Examples: "add more salt", "reduce the cooking time", "make it vegetarian", "add ingredient X", "remove X", "change X to Y", "make it spicier", "use less sugar")
+         - Change requests explicitly ask to modify the recipe
+         - Change requests use action verbs: add, remove, change, reduce, increase, make, use, replace, etc.
+
+      ============================================================================
+      STEP 2: HANDLE BASED ON CLASSIFICATION
+      ============================================================================
+
+      ⚠️ IF USER IS ASKING A QUESTION (Category A):
+      - STOP HERE - Do NOT proceed to recipe processing steps
+      - Answer the question helpfully and warmly in your message ONLY
+      - Return the EXACT SAME recipe data as the current recipe:
+        * title: "#{recipe.title}"
+        * description: "#{recipe.description}"
+        * content: #{recipe.content.to_json}
+        * shopping_list: #{recipe.shopping_list.to_json}
+      - Do NOT modify, regenerate, or change ANY recipe fields
+      - Do NOT go through recipe processing checklist
+      - Do NOT check allergies, preferences, or appliances (recipe is already set)
+      - Your message should ONLY answer their question in a warm, encouraging chef persona
+      - End with a line break and "Tell me what to change next"
+      - CRITICAL: Copy the recipe data EXACTLY as shown above - do not recreate or modify it
+
+      ⚠️ IF USER IS REQUESTING A CHANGE (Category B):
+      - Proceed to recipe modification
+      - Follow the user's explicit requests exactly as stated
       - If the user asks to "add [ingredient]", ADD it to the recipe
       - If the user asks to "reduce sweetness" or modify quantities, DO IT
-      - If the user requests an ingredient they're allergic to: Include it BUT add a prominent WARNING in the recipe description or instructions
-      - Make ONLY the changes the user requested - do not make additional modifications unless necessary for recipe coherence
-      - If the user's request conflicts with preferences/allergies: Follow the request but add appropriate warnings
-      - Always acknowledge in your message what changes you made based on the user's request
-      - Do NOT ignore explicit requests - if the user asks for something, implement it
+      - If the user requests an ingredient they're allergic to: Include it BUT add a prominent WARNING
+      - Make ONLY the changes the user requested
+      - Update the recipe fields (title, description, content, shopping_list) with the modified recipe
+      - Then proceed through the recipe processing checklist (allergies, preferences, appliances, etc.)
+
+      ============================================================================
+      EXAMPLES FOR CLARITY:
+      ============================================================================
+
+      User: "are the pancakes going to cook?"
+      → This is a QUESTION (Category A)
+      → Answer: "Yes! The pancakes will cook perfectly using the kettle-steaming method. The steam will cook them through, creating fluffy, tender pancakes. Just make sure to steam them for the full time indicated in the instructions."
+      → Return EXACT same recipe data unchanged
+
+      User: "add chocolate chips"
+      → This is a CHANGE REQUEST (Category B)
+      → Modify recipe to include chocolate chips
+      → Update recipe data with the change
+
+      User: "what can I use instead of soy milk?"
+      → This is a QUESTION (Category A)
+      → Answer: "You can substitute soy milk with any plant-based milk like oat milk, rice milk, or coconut milk. Each will give a slightly different flavor, but they'll all work well in this recipe!"
+      → Return EXACT same recipe data unchanged
     TEXT
+  end
+
+  def recipe_data_changed?(recipe, new_data)
+    # Compare current recipe data with new data to determine if anything changed
+    # Returns true if any field has changed, false if all fields are the same
+
+    # Check title (only if new_data has title and it's different)
+    return true if new_data.key?("title") && (new_data["title"] != recipe.title)
+
+    # Check description (only if new_data has description and it's different)
+    return true if new_data.key?("description") && (new_data["description"] != recipe.description)
+
+    # Check content (deep comparison for hash/array structures)
+    if new_data.key?("content")
+      new_content = new_data["content"] || {}
+      current_content = recipe.content || {}
+      return true unless content_equal?(current_content, new_content)
+    end
+
+    # Check shopping_list (array comparison)
+    if new_data.key?("shopping_list")
+      new_list = Array(new_data["shopping_list"] || [])
+      current_list = Array(recipe.shopping_list || [])
+      return true unless arrays_equal?(current_list, new_list)
+    end
+
+    # Check recipe_summary_for_prompt if it exists in the model
+    if new_data.key?("recipe_summary_for_prompt") && recipe.respond_to?(:recipe_summary_for_prompt) && (new_data["recipe_summary_for_prompt"] != recipe.recipe_summary_for_prompt)
+      return true
+    end
+
+    # No changes detected
+    false
+  end
+
+  def content_equal?(current, new_content)
+    # Deep comparison of content hash
+    return false unless current.is_a?(Hash) && new_content.is_a?(Hash)
+
+    # Compare all keys
+    all_keys = (current.keys + new_content.keys).uniq
+    all_keys.all? do |key|
+      current_val = current[key]
+      new_val = new_content[key]
+
+      if current_val.is_a?(Array) && new_val.is_a?(Array)
+        arrays_equal?(current_val, new_val)
+      else
+        current_val == new_val
+      end
+    end
+  end
+
+  def arrays_equal?(arr1, arr2)
+    return false unless arr1.length == arr2.length
+
+    arr1.sort == arr2.sort
   end
 end
