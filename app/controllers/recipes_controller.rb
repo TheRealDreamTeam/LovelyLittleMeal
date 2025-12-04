@@ -63,10 +63,13 @@ class RecipesController < ApplicationController
       role: "assistant"
     )
 
-    # Only update recipe if there are actual changes to the recipe data
-    # If user is just asking a question, the AI should return the same recipe data unchanged
-    recipe_data = response.except("message")
-    if recipe_data_changed?(@recipe, recipe_data)
+    # Only update recipe if the LLM explicitly marked it as modified
+    # The recipe_modified field tells us if the recipe data was actually changed
+    # Default to true if not present (better to update unnecessarily than miss an update)
+    recipe_data = response.except("message", "recipe_modified")
+    recipe_modified = response["recipe_modified"]
+    @recipe_changed = recipe_modified.nil? || recipe_modified == true || recipe_modified == "true"
+    if @recipe_changed
       @recipe.update!(recipe_data)
       @recipe.reload
     end
@@ -119,7 +122,7 @@ class RecipesController < ApplicationController
       STEP 1: RECEIVE AND ANALYZE USER INPUT - CLASSIFY INTENT FIRST
       ⚠️ CRITICAL: You MUST classify the user's intent before proceeding:
 
-      - If this is a NEW recipe request (no existing recipe context): The user provides a link, free text recipe request, or complete recipe. Extract all ingredients and steps, then proceed to STEP 2 (recipe processing).
+      - If this is a NEW recipe request (no existing recipe context): The user provides a link, free text recipe request, or complete recipe. Extract all ingredients and steps, then proceed to STEP 2 (recipe processing). Set recipe_modified: true (you are creating a new recipe).
 
       - If this is about an EXISTING recipe (you have current recipe data in the prompt):
         * FIRST: Check if the user is asking a QUESTION (e.g., "How long?", "What can I substitute?", "Is this spicy?", "Will this cook?", "Are the pancakes going to cook?")
@@ -378,12 +381,14 @@ class RecipesController < ApplicationController
         * description: "#{recipe.description}"
         * content: #{recipe.content.to_json}
         * shopping_list: #{recipe.shopping_list.to_json}
+        * recipe_modified: false (CRITICAL: Set to false because you are NOT modifying the recipe)
       - Do NOT modify, regenerate, or change ANY recipe fields
       - Do NOT go through recipe processing checklist
       - Do NOT check allergies, preferences, or appliances (recipe is already set)
       - Your message should ONLY answer their question in a warm, encouraging chef persona
       - End with a line break and "Tell me what to change next"
       - CRITICAL: Copy the recipe data EXACTLY as shown above - do not recreate or modify it
+      - CRITICAL: Set recipe_modified to false - you are answering a question, not modifying the recipe
 
       ⚠️ IF USER IS REQUESTING A CHANGE (Category B):
       - Proceed to recipe modification
@@ -393,6 +398,7 @@ class RecipesController < ApplicationController
       - If the user requests an ingredient they're allergic to: Include it BUT add a prominent WARNING
       - Make ONLY the changes the user requested
       - Update the recipe fields (title, description, content, shopping_list) with the modified recipe
+      - Set recipe_modified: true (CRITICAL: Set to true because you ARE modifying the recipe)
       - Then proceed through the recipe processing checklist (allergies, preferences, appliances, etc.)
 
       ============================================================================
@@ -403,73 +409,19 @@ class RecipesController < ApplicationController
       → This is a QUESTION (Category A)
       → Answer: "Yes! The pancakes will cook perfectly using the kettle-steaming method. The steam will cook them through, creating fluffy, tender pancakes. Just make sure to steam them for the full time indicated in the instructions."
       → Return EXACT same recipe data unchanged
+      → Set recipe_modified: false
 
       User: "add chocolate chips"
       → This is a CHANGE REQUEST (Category B)
       → Modify recipe to include chocolate chips
       → Update recipe data with the change
+      → Set recipe_modified: true
 
       User: "what can I use instead of soy milk?"
       → This is a QUESTION (Category A)
       → Answer: "You can substitute soy milk with any plant-based milk like oat milk, rice milk, or coconut milk. Each will give a slightly different flavor, but they'll all work well in this recipe!"
       → Return EXACT same recipe data unchanged
+      → Set recipe_modified: false
     TEXT
-  end
-
-  def recipe_data_changed?(recipe, new_data)
-    # Compare current recipe data with new data to determine if anything changed
-    # Returns true if any field has changed, false if all fields are the same
-
-    # Check title (only if new_data has title and it's different)
-    return true if new_data.key?("title") && (new_data["title"] != recipe.title)
-
-    # Check description (only if new_data has description and it's different)
-    return true if new_data.key?("description") && (new_data["description"] != recipe.description)
-
-    # Check content (deep comparison for hash/array structures)
-    if new_data.key?("content")
-      new_content = new_data["content"] || {}
-      current_content = recipe.content || {}
-      return true unless content_equal?(current_content, new_content)
-    end
-
-    # Check shopping_list (array comparison)
-    if new_data.key?("shopping_list")
-      new_list = Array(new_data["shopping_list"] || [])
-      current_list = Array(recipe.shopping_list || [])
-      return true unless arrays_equal?(current_list, new_list)
-    end
-
-    # Check recipe_summary_for_prompt if it exists in the model
-    if new_data.key?("recipe_summary_for_prompt") && recipe.respond_to?(:recipe_summary_for_prompt) && (new_data["recipe_summary_for_prompt"] != recipe.recipe_summary_for_prompt)
-      return true
-    end
-
-    # No changes detected
-    false
-  end
-
-  def content_equal?(current, new_content)
-    # Deep comparison of content hash
-    return false unless current.is_a?(Hash) && new_content.is_a?(Hash)
-
-    # Compare all keys
-    all_keys = (current.keys + new_content.keys).uniq
-    all_keys.all? do |key|
-      current_val = current[key]
-      new_val = new_content[key]
-
-      if current_val.is_a?(Array) && new_val.is_a?(Array)
-        arrays_equal?(current_val, new_val)
-      else
-        current_val == new_val
-      end
-    end
-  end
-
-  def arrays_equal?(arr1, arr2)
-    return false unless arr1.length == arr2.length
-
-    arr1.sort == arr2.sort
   end
 end
