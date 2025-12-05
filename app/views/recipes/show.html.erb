@@ -1,3 +1,6 @@
+<%# Subscribe to Turbo Stream updates for this recipe %>
+<%= turbo_stream_from "recipe_#{@recipe.id}" %>
+
 <% left_content = capture do %>
   <div id="recipe-details" class="overflow-y-auto flex-grow-1" style="min-height: 0; max-height: 100%;">
     <%= render "recipes/details", recipe: @recipe %>

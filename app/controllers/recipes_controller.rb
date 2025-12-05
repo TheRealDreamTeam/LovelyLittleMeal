@@ -50,18 +50,17 @@ class RecipesController < ApplicationController
     @recipes = current_user.recipes
                            .order(favorite: :desc, created_at: :desc)
 
-  if params[:query].present?
-    @recipes = @recipes.where(
-      "recipes.title ILIKE :q OR recipes.description ILIKE :q",
-      q: "%#{params[:query]}%"
-    )
-  end
+    if params[:query].present?
+      @recipes = @recipes.where(
+        "recipes.title ILIKE :q OR recipes.description ILIKE :q",
+        q: "%#{params[:query]}%"
+      )
+    end
 
-  if params[:favorites] == "1"
+    return unless params[:favorites] == "1"
+
     @recipes = @recipes.where(favorite: true)
   end
-
-end
 
   def message
     @chat = @recipe.chat
@@ -87,12 +86,28 @@ end
     # Only update recipe if the LLM explicitly marked it as modified
     # The recipe_modified field tells us if the recipe data was actually changed
     # Default to true if not present (better to update unnecessarily than miss an update)
-    recipe_data = response.except("message", "recipe_modified")
+    recipe_data = response.except("message", "recipe_modified", "change_magnitude")
     recipe_modified = response["recipe_modified"]
+    change_magnitude = response["change_magnitude"]&.downcase
     @recipe_changed = recipe_modified.nil? || recipe_modified == true || recipe_modified == "true"
     if @recipe_changed
       @recipe.update!(recipe_data)
       @recipe.reload
+
+      # Determine if image regeneration is needed
+      # Regenerate if: no image exists OR change is significant (any ingredient change, not just quantities)
+      # Significant changes require new images to accurately represent the different recipe
+      # Quantity-only changes (minor) don't require regeneration
+      requires_regeneration = !@recipe.image.attached? || change_magnitude == "significant"
+      @image_regenerating = requires_regeneration && @recipe.image.attached?
+
+      if requires_regeneration
+        # Generate image asynchronously in the background
+        # This allows the request to return immediately while image generation happens in parallel
+        # Multiple image generation jobs can run concurrently, enabling parallelization
+        # Pass force_regenerate flag if image exists but change is significant
+        RecipeImageGenerationJob.perform_later(@recipe.id, { force_regenerate: @recipe.image.attached? })
+      end
     end
 
     respond_to do |format|
@@ -220,7 +235,7 @@ end
       1. Start with an encouraging, friendly introduction about the recipe
       2. If you made actual adjustments, mention them factually and specifically
       3. End with an encouraging note about enjoying the recipe
-      4. Add a line break, then add: "Tell me what to change next"
+      4. Add a line break, then add: "Let me know if you need any adjustments!"
 
       Rules for mentioning adjustments (ONLY mention if you actually made changes):
       - If you removed or substituted allergy ingredients FROM THE ORIGINAL RECIPE: State which ingredients were avoided and what substitutes were used (e.g., "I've removed [allergen ingredient] and used [substitute] instead to keep it safe for you")
@@ -412,7 +427,7 @@ end
       - Do NOT go through recipe processing checklist
       - Do NOT check allergies, preferences, or appliances (recipe is already set)
       - Your message should ONLY answer their question in a warm, encouraging chef persona
-      - End with a line break and "Tell me what to change next"
+      - End with a line break and "Let me know if you need any adjustments!"
       - CRITICAL: Copy the recipe data EXACTLY as shown above - do not recreate or modify it
       - CRITICAL: Set recipe_modified to false - you are answering a question, not modifying the recipe
 
@@ -425,6 +440,11 @@ end
       - Make ONLY the changes the user requested
       - Update the recipe fields (title, description, content, shopping_list) with the modified recipe
       - Set recipe_modified: true (CRITICAL: Set to true because you ARE modifying the recipe)
+      - Set change_magnitude appropriately:
+        * Use "significant" if ANY ingredients were added, removed, or changed (e.g., adding chocolate chips, removing an ingredient, replacing one ingredient with another, completely different dish type like meat dish → chocolate fudges)
+        * Use "minor" ONLY for pure quantity adjustments where the same ingredients are used but amounts changed (e.g., "use 200g instead of 150g", "reduce salt to 5g", "double the recipe")
+        * Use "none" only if no changes were made (should not happen if recipe_modified is true)
+        * CRITICAL: Adding/removing/replacing ANY ingredient = "significant". Only changing quantities of existing ingredients = "minor"
       - Then proceed through the recipe processing checklist (allergies, preferences, appliances, etc.)
 
       ============================================================================
@@ -442,6 +462,21 @@ end
       → Modify recipe to include chocolate chips
       → Update recipe data with the change
       → Set recipe_modified: true
+      → Set change_magnitude: "significant" (adding an ingredient requires image regeneration)
+
+      User: "use 200g flour instead of 150g"
+      → This is a CHANGE REQUEST (Category B)
+      → Modify recipe to change quantity only
+      → Update recipe data with the change
+      → Set recipe_modified: true
+      → Set change_magnitude: "minor" (only quantity changed, same ingredient)
+
+      User: "I want a completely new recipe - chocolate fudges"
+      → This is a CHANGE REQUEST (Category B)
+      → Completely replace the recipe with chocolate fudges
+      → Update recipe data with the new recipe
+      → Set recipe_modified: true
+      → Set change_magnitude: "significant" (completely different dish type requires new image)
 
       User: "what can I use instead of soy milk?"
       → This is a QUESTION (Category A)

@@ -20,7 +20,7 @@
 <%# For questions, the recipe stays the same so we don't need to update the view %>
 <% if @recipe_changed %>
   <%= turbo_stream.replace "recipe-details" do %>
-    <%= render "recipes/details", recipe: @recipe %>
+    <%= render "recipes/details", recipe: @recipe, image_regenerating: @image_regenerating %>
   <% end %>
 <% end %>
 
