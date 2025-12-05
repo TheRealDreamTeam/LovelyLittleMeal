@@ -96,9 +96,11 @@ end
       @recipe.reload
       
       # Determine if image regeneration is needed
-      # Regenerate if: no image exists OR change is significant (e.g., meat dish -> chocolate fudges)
-      # Significant changes require new images to accurately represent the completely different recipe
+      # Regenerate if: no image exists OR change is significant (any ingredient change, not just quantities)
+      # Significant changes require new images to accurately represent the different recipe
+      # Quantity-only changes (minor) don't require regeneration
       requires_regeneration = !@recipe.image.attached? || change_magnitude == "significant"
+      @image_regenerating = requires_regeneration && @recipe.image.attached?
       
       if requires_regeneration
         # Generate image asynchronously in the background
@@ -440,9 +442,10 @@ end
       - Update the recipe fields (title, description, content, shopping_list) with the modified recipe
       - Set recipe_modified: true (CRITICAL: Set to true because you ARE modifying the recipe)
       - Set change_magnitude appropriately:
-        * Use "significant" if the recipe has changed substantially (e.g., completely different dish type like meat dish → chocolate fudges, major ingredient category changes, recipe type changed from savory to sweet or vice versa, complete recipe replacement)
-        * Use "minor" for small adjustments (e.g., adding/removing one ingredient, adjusting quantities, minor modifications that don't change the fundamental nature of the dish)
+        * Use "significant" if ANY ingredients were added, removed, or changed (e.g., adding chocolate chips, removing an ingredient, replacing one ingredient with another, completely different dish type like meat dish → chocolate fudges)
+        * Use "minor" ONLY for pure quantity adjustments where the same ingredients are used but amounts changed (e.g., "use 200g instead of 150g", "reduce salt to 5g", "double the recipe")
         * Use "none" only if no changes were made (should not happen if recipe_modified is true)
+        * CRITICAL: Adding/removing/replacing ANY ingredient = "significant". Only changing quantities of existing ingredients = "minor"
       - Then proceed through the recipe processing checklist (allergies, preferences, appliances, etc.)
 
       ============================================================================
@@ -460,7 +463,14 @@ end
       → Modify recipe to include chocolate chips
       → Update recipe data with the change
       → Set recipe_modified: true
-      → Set change_magnitude: "minor" (adding one ingredient doesn't fundamentally change the dish)
+      → Set change_magnitude: "significant" (adding an ingredient requires image regeneration)
+
+      User: "use 200g flour instead of 150g"
+      → This is a CHANGE REQUEST (Category B)
+      → Modify recipe to change quantity only
+      → Update recipe data with the change
+      → Set recipe_modified: true
+      → Set change_magnitude: "minor" (only quantity changed, same ingredient)
 
       User: "I want a completely new recipe - chocolate fudges"
       → This is a CHANGE REQUEST (Category B)

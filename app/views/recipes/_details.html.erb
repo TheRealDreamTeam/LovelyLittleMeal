@@ -27,7 +27,7 @@
     <% end %>
   </div>
   <%# Recipe Image %>
-  <%= render "recipes/image", recipe: recipe %>
+  <%= render "recipes/image", recipe: recipe, image_regenerating: local_assigns[:image_regenerating] || false %>
   <%# Recipe Content %>
   <% if recipe.content.present? && recipe.content.is_a?(Hash) %>
     <%# Long Description %>

@@ -1,16 +1,35 @@
 <%# Recipe Image Partial
     Displays the recipe image with a loading placeholder if image is being generated
     This partial can be replaced via Turbo Stream when the image is ready
+    Shows regeneration overlay when image exists but is being regenerated
 %>
+<% image_regenerating = local_assigns[:image_regenerating] || false %>
 <div id="recipe-image-<%= recipe.id %>" class="mb-4">
   <% if recipe.image.attached? %>
-    <%# Image is ready - display it %>
-    <%# Use rails_blob_path to generate relative path - browser will use current host %>
-    <%# This works in both regular requests and background job broadcasts %>
-    <%= image_tag rails_blob_path(recipe.image), 
-                  alt: "#{recipe.title} image",
-                  class: "img-fluid rounded",
-                  style: "width: 100%; max-height: 400px; object-fit: cover;" %>
+    <%# Image container with relative positioning for overlay %>
+    <div class="position-relative" style="width: 100%;">
+      <%# Image is ready - display it %>
+      <%# Use rails_blob_path to generate relative path - browser will use current host %>
+      <%# This works in both regular requests and background job broadcasts %>
+      <%= image_tag rails_blob_path(recipe.image), 
+                    alt: "#{recipe.title} image",
+                    class: "img-fluid rounded",
+                    style: "width: 100%; max-height: 400px; object-fit: cover; display: block;" %>
+      
+      <%# Regeneration overlay - shows when image exists but is being regenerated %>
+      <%# Overlay covers the entire image with a translucent dark background and spinner %>
+      <% if image_regenerating %>
+        <div class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center rounded" 
+             style="background-color: rgba(0, 0, 0, 0.6); z-index: 10; pointer-events: none;">
+          <div class="text-center text-white">
+            <div class="spinner-border spinner-border-sm mb-2" role="status" aria-hidden="true">
+              <span class="visually-hidden">Regenerating...</span>
+            </div>
+            <p class="mb-0 small">Regenerating image...</p>
+          </div>
+        </div>
+      <% end %>
+    </div>
   <% elsif recipe.content.present? && recipe.content.is_a?(Hash) && recipe.content.any? %>
     <%# Recipe has content but no image yet - show loading placeholder %>
     <%# This indicates image generation is in progress %>
