@@ -78,9 +78,18 @@
     <%# Filter out invalid entries - only keep non-empty strings %>
     <% valid_items = recipe.shopping_list.select { |item| item.is_a?(String) && item.present? && item.strip.length > 0 } %>
     <% if valid_items.any? %>
-      <div class="mb-4">
-        <h3 class="h5 mb-3">Shopping List</h3>
-        <div class="bg-light p-3 rounded">
+      <div class="mb-4" data-controller="clipboard">
+        <div class="d-flex align-items-center gap-2 mb-3">
+          <h3 class="h5 mb-0">Shopping List</h3>
+          <button type="button"
+                  class="btn btn-sm btn-outline-secondary p-1"
+                  data-action="click->clipboard#copy"
+                  title="Copy shopping list to clipboard"
+                  aria-label="Copy shopping list to clipboard">
+            <i class="bi bi-clipboard fs-6"></i>
+          </button>
+        </div>
+        <div class="bg-light p-3 rounded" data-clipboard-target="source">
           <ul class="list-unstyled mb-0">
             <% valid_items.each do |item| %>
               <li >
