@@ -43,10 +43,9 @@
     <% if @recipes.any? %>
       <% @recipes.each do |recipe| %>
         <div class="recipe-card mb-3 pb-3 border-bottom d-flex justify-content-between align-items-start">
-
           <!-- LEFT SIDE: Title + Description + Date -->
           <div class="flex-grow-1">
-            <%= link_to recipe_path(recipe), class: "text-decoration-none text-dark", data: { turbo_prefetch: false } do %>
+            <%= link_to recipe_path(recipe), class: "text-decoration-none text-dark", data: { turbo_prefetch: false, turbo_frame: "_top" } do %>
               <h3 class="h5 mb-1"><%= recipe.title || "Untitled Recipe" %></h3>
 
               <% if recipe.description.present? && recipe.description != "Nothing here yet..." %>
@@ -87,7 +86,7 @@
       </div>
     <% end %>
   </div>
-  </turbo-frame>
+  </turbo-frame >
 <% end %>
 
 <% right_content = capture do %>
