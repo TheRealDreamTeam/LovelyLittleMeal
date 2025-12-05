@@ -1,0 +1,28 @@
+<%# Recipe Image Partial
+    Displays the recipe image with a loading placeholder if image is being generated
+    This partial can be replaced via Turbo Stream when the image is ready
+%>
+<div id="recipe-image-<%= recipe.id %>" class="mb-4">
+  <% if recipe.image.attached? %>
+    <%# Image is ready - display it %>
+    <%# Use rails_blob_path to generate relative path - browser will use current host %>
+    <%# This works in both regular requests and background job broadcasts %>
+    <%= image_tag rails_blob_path(recipe.image), 
+                  alt: "#{recipe.title} image",
+                  class: "img-fluid rounded",
+                  style: "width: 100%; max-height: 400px; object-fit: cover;" %>
+  <% elsif recipe.content.present? && recipe.content.is_a?(Hash) && recipe.content.any? %>
+    <%# Recipe has content but no image yet - show loading placeholder %>
+    <%# This indicates image generation is in progress %>
+    <div class="bg-light rounded d-flex align-items-center justify-content-center" 
+         style="width: 100%; height: 300px; min-height: 300px;">
+      <div class="text-center text-muted">
+        <div class="spinner-border spinner-border-sm mb-2" role="status" aria-hidden="true">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mb-0 small">Generating recipe image...</p>
+      </div>
+    </div>
+  <% end %>
+</div>
+

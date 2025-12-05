@@ -93,6 +93,12 @@ end
     if @recipe_changed
       @recipe.update!(recipe_data)
       @recipe.reload
+      
+      # Generate image asynchronously in the background
+      # This allows the request to return immediately while image generation happens in parallel
+      # Multiple image generation jobs can run concurrently, enabling parallelization
+      # Only generate if image doesn't already exist (idempotency)
+      RecipeImageGenerationJob.perform_later(@recipe.id) unless @recipe.image.attached?
     end
 
     respond_to do |format|

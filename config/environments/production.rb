@@ -68,7 +68,11 @@ Rails.application.configure do
   # config.cache_store = :mem_cache_store
 
   # Use a real queuing backend for Active Job (and separate queues per environment).
-  # config.active_job.queue_adapter = :resque
+  # Options:
+  # - :solid_queue (add gem 'solid_queue' to Gemfile, then run: bundle add solid_queue && rails solid_queue:install)
+  # - :sidekiq (add gem 'sidekiq' to Gemfile, then configure)
+  # - :async (works but not recommended for production - jobs lost on restart)
+  config.active_job.queue_adapter = :async  # TODO: Switch to :solid_queue or :sidekiq for production
   # config.active_job.queue_name_prefix = "lovely_little_meal_production"
 
   config.action_mailer.perform_caching = false
