@@ -79,3 +79,10 @@ gem "devise", "~> 4.9"
 gem "ruby_llm", "~> 1.9"
 
 gem "ruby_llm-schema", "~> 0.2.5"
+
+# Web scraping for recipe link extraction
+gem "nokogiri", "~> 1.15"
+gem "faraday", "~> 2.0"
+
+# Image generation for stub strategy
+gem "chunky_png", "~> 1.4"
