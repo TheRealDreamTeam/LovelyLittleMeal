@@ -48,25 +48,36 @@
           <div class="mb-3">
             <%= f.label :allergies, "Allergies", class: "form-label d-block" %>
 
-            <% allergy_options = %w[gluten lactose crustaceans nuts egg] %>
-            <% selected_allergies =
-                 if @user.allergies.is_a?(Array)
-                   @user.allergies.map(&:to_s)
-                 elsif @user.allergies.present?
-                   @user.allergies.to_s.split(",").map(&:strip)
-                 else
-                   []
-                 end %>
+            <% allergy_options = {
+                 "peanut" => "Peanut",
+                 "tree_nuts" => "Tree nuts",
+                 "sesame" => "Sesame",
+                 "shellfish" => "Shellfish",
+                 "milk" => "Milk",
+                 "egg" => "Egg",
+                 "fish" => "Fish",
+                 "wheat" => "Wheat",
+                 "soy" => "Soy",
+                 "kiwi" => "Kiwi"
+               } %>
 
-            <% allergy_options.each do |allergy| %>
+            <% # Get current allergies (handle both hash and legacy formats)
+               current_allergies = if @user.allergies.is_a?(Hash)
+                                     @user.allergies
+                                   else
+                                     # Legacy format - initialize empty hash
+                                     User::STANDARD_ALLERGIES.each_with_object({}) { |a, h| h[a] = false }
+                                   end %>
+
+            <% allergy_options.each do |key, label| %>
               <div class="form-check form-check-inline">
-                <%= check_box_tag "user[allergies][]",
-                                  allergy,
-                                  selected_allergies.include?(allergy),
-                                  id: "user_allergies_#{allergy}",
+                <%= check_box_tag "user[allergies][#{key}]",
+                                  1,
+                                  current_allergies[key.to_s] == true || current_allergies[key.to_sym] == true,
+                                  id: "user_allergies_#{key}",
                                   class: "form-check-input" %>
-                <%= label_tag "user_allergies_#{allergy}",
-                              allergy.capitalize,
+                <%= label_tag "user_allergies_#{key}",
+                              label,
                               class: "form-check-label" %>
               </div>
             <% end %>

@@ -83,22 +83,45 @@ class RecipesController < ApplicationController
     # Process AI response
     response = process_prompt(@chat, @user_message)
 
+    # Log response for debugging
+    Rails.logger.info("=== Recipe Update Debug ===")
+    Rails.logger.info("Response class: #{response.class}")
+    Rails.logger.info("Response keys: #{response.keys.inspect}")
+    Rails.logger.info("Response recipe_modified: #{response['recipe_modified'] || response[:recipe_modified]}")
+    Rails.logger.info("Response message: #{response['message'] || response[:message]}")
+    Rails.logger.info("Response has title: #{response.key?('title') || response.key?(:title)}")
+
     # Create AI message
+    message_content = response["message"] || response[:message] || "Recipe generated"
     @ai_message = @chat.messages.create!(
-      content: response["message"],
+      content: message_content,
       role: "assistant"
     )
 
     # Only update recipe if the LLM explicitly marked it as modified
     # The recipe_modified field tells us if the recipe data was actually changed
     # Default to true if not present (better to update unnecessarily than miss an update)
-    recipe_data = response.except("message", "recipe_modified", "change_magnitude")
-    recipe_modified = response["recipe_modified"]
-    change_magnitude = response["change_magnitude"]&.downcase
+    # Handle both string and symbol keys
+    recipe_data = response.except("message", "recipe_modified", "change_magnitude", :message, :recipe_modified,
+                                  :change_magnitude)
+    recipe_modified = response["recipe_modified"] || response[:recipe_modified]
+    change_magnitude = (response["change_magnitude"] || response[:change_magnitude])&.downcase
     @recipe_changed = recipe_modified.nil? || recipe_modified == true || recipe_modified == "true"
+
+    Rails.logger.info("Recipe changed: #{@recipe_changed}")
+    Rails.logger.info("Recipe data keys: #{recipe_data.keys.inspect}")
+
     if @recipe_changed
-      @recipe.update!(recipe_data)
-      @recipe.reload
+      Rails.logger.info("Updating recipe with data: #{recipe_data.inspect}")
+      begin
+        @recipe.update!(recipe_data)
+        @recipe.reload
+        Rails.logger.info("Recipe updated successfully. Title: #{@recipe.title}")
+      rescue StandardError => e
+        Rails.logger.error("Failed to update recipe: #{e.message}")
+        Rails.logger.error(e.backtrace.join("\n"))
+        raise
+      end
 
       # Determine if image regeneration is needed
       # Regenerate if: no image exists OR change is significant (any ingredient change, not just quantities)
@@ -149,19 +172,258 @@ class RecipesController < ApplicationController
   end
 
   def process_prompt(chat, user_message)
+    # Track timing for each phase
+    timings = {}
+    total_start_time = Time.current
+
+    # Phase 1: Initial Analysis (Parallel)
+    # Classify user intent and analyze conversation context
+    phase1_start = Time.current
+    intent_result = classify_intent(chat, user_message)
+    timings[:intent_classification] = (Time.current - phase1_start) * 1000 # Convert to milliseconds
+
+    context_start = Time.current
+    conversation_context = analyze_conversation_context(chat, user_message)
+    timings[:conversation_context_analysis] = (Time.current - context_start) * 1000
+
+    # Phase 2: Conditional Link Extraction
+    # Only if intent is first_message_link
+    extracted_recipe_data = nil
+    if intent_result[:intent] == "first_message_link" && intent_result[:detected_url].present?
+      link_extraction_start = Time.current
+      begin
+        extracted_recipe_data = Tools::RecipeLinkExtractor.extract(intent_result[:detected_url])
+        timings[:link_extraction] = (Time.current - link_extraction_start) * 1000
+        Rails.logger.info("RecipeLinkExtractor: Successfully extracted recipe from #{intent_result[:detected_url]} (#{timings[:link_extraction].round(2)}ms)")
+      rescue Tools::ExecutionError, Tools::InvalidInputError => e
+        timings[:link_extraction] = (Time.current - link_extraction_start) * 1000
+        Rails.logger.error("RecipeLinkExtractor: Failed to extract recipe: #{e.message} (#{timings[:link_extraction].round(2)}ms)")
+        # Continue with normal flow - LLM will handle the URL
+      end
+    else
+      timings[:link_extraction] = 0
+    end
+
+    # Phase 3: Recipe Generation/Modification
+    # Build enhanced prompt with context and extracted data
+    prompt_building_start = Time.current
+    enhanced_prompt = build_enhanced_prompt(
+      chat: chat,
+      user_message: user_message,
+      intent: intent_result,
+      conversation_context: conversation_context,
+      extracted_recipe_data: extracted_recipe_data
+    )
+    timings[:prompt_building] = (Time.current - prompt_building_start) * 1000
+
     # Create RubyLLM chat instance with system instructions and schema
+    # Use gpt-4o for recipe generation to ensure reliable structured output
+    # Tools use faster gpt-4.1-nano models, but recipe generation needs the full model
+    chat_setup_start = Time.current
     ruby_llm_chat = RubyLLM.chat(model: "gpt-4o")
                            .with_instructions(system_prompt(current_user) + system_prompt_addition(chat.recipe))
                            .with_schema(RecipeSchema)
+    timings[:chat_setup] = (Time.current - chat_setup_start) * 1000
 
     # Add conversation history from previous messages (excluding current one)
     # This provides context so the AI remembers the conversation flow
     # and doesn't repeat greetings or lose track of what was discussed
     # Only include the last MAX_CONVERSATION_HISTORY messages to control token usage
+    history_start = Time.current
     build_conversation_history(chat, user_message, ruby_llm_chat)
+    timings[:conversation_history_building] = (Time.current - history_start) * 1000
 
-    # Ask with the current user message content
-    ruby_llm_chat.ask(user_message.content).content
+    # Ask with the enhanced prompt
+    llm_call_start = Time.current
+    llm_response = ruby_llm_chat.ask(enhanced_prompt)
+    response = llm_response.content
+    timings[:llm_recipe_generation] = (Time.current - llm_call_start) * 1000
+
+    # Log response structure for debugging
+    Rails.logger.info("LLM Response keys: #{response.keys.inspect}")
+    Rails.logger.info("LLM Response recipe_modified: #{response['recipe_modified']}")
+    Rails.logger.info("LLM Response has title: #{response.key?('title')}")
+    Rails.logger.info("LLM Response has content: #{response.key?('content')}")
+
+    # Phase 4: Validation & Auto-Fix
+    # Validate allergen warnings and automatically fix violations if recipe was modified
+    validation_start = Time.current
+    if [true, "true"].include?(response["recipe_modified"])
+      # Validate and fix violations automatically
+      response = validate_allergen_warnings(response, user_message, ruby_llm_chat)
+    end
+    timings[:allergen_validation] = (Time.current - validation_start) * 1000
+
+    # Calculate total time and log all timings
+    total_time = (Time.current - total_start_time) * 1000
+    timings[:total] = total_time
+
+    # Log detailed timing breakdown
+    Rails.logger.info("=" * 80)
+    Rails.logger.info("Recipe Generation Performance Breakdown:")
+    Rails.logger.info("  Intent Classification:        #{timings[:intent_classification].round(2)}ms")
+    Rails.logger.info("  Context Analysis:             #{timings[:conversation_context_analysis].round(2)}ms")
+    Rails.logger.info("  Link Extraction:              #{timings[:link_extraction].round(2)}ms")
+    Rails.logger.info("  Prompt Building:              #{timings[:prompt_building].round(2)}ms")
+    Rails.logger.info("  Chat Setup:                    #{timings[:chat_setup].round(2)}ms")
+    Rails.logger.info("  Conversation History Building: #{timings[:conversation_history_building].round(2)}ms")
+    Rails.logger.info("  LLM Recipe Generation:        #{timings[:llm_recipe_generation].round(2)}ms (#{(timings[:llm_recipe_generation] / total_time * 100).round(1)}% of total)")
+    Rails.logger.info("  Allergen Validation:           #{timings[:allergen_validation].round(2)}ms")
+    Rails.logger.info("  " + ("-" * 78))
+    Rails.logger.info("  TOTAL TIME:                    #{total_time.round(2)}ms")
+    Rails.logger.info("=" * 80)
+
+    response
+  end
+
+  # Classifies user intent using IntentClassifier tool
+  def classify_intent(chat, user_message)
+    # Build conversation history text
+    conversation_history = build_conversation_history_text(chat, user_message)
+
+    # Build current recipe state
+    current_recipe_state = if chat.recipe && recipe_has_content?(chat.recipe)
+                             "Title: #{chat.recipe.title}\nDescription: #{chat.recipe.description}"
+                           else
+                             ""
+                           end
+
+    # Classify intent
+    classifier = Tools::IntentClassifier.new
+    classifier.execute(
+      user_message: user_message.content,
+      conversation_history: conversation_history,
+      current_recipe_state: current_recipe_state
+    )
+  end
+
+  # Analyzes conversation context using ConversationContextAnalyzer tool
+  def analyze_conversation_context(chat, user_message)
+    # Build conversation history text
+    conversation_history = build_conversation_history_text(chat, user_message)
+
+    # Analyze context
+    analyzer = Tools::ConversationContextAnalyzer.new
+    analyzer.execute(conversation_history: conversation_history)
+  end
+
+  # Builds conversation history as formatted text
+  def build_conversation_history_text(chat, user_message)
+    previous_messages = chat.messages
+                            .where.not(id: user_message.id)
+                            .order(:created_at)
+                            .limit(MAX_CONVERSATION_HISTORY)
+
+    previous_messages.map do |message|
+      "#{message.role.capitalize}: #{message.content}"
+    end.join("\n")
+  end
+
+  # Builds enhanced prompt with context and extracted data
+  def build_enhanced_prompt(chat:, user_message:, intent:, conversation_context:, extracted_recipe_data:)
+    parts = []
+
+    # Add extracted recipe data if available
+    if extracted_recipe_data
+      parts << "EXTRACTED RECIPE DATA FROM URL:"
+      parts << "Title: #{extracted_recipe_data[:title]}"
+      parts << "Description: #{extracted_recipe_data[:description]}" if extracted_recipe_data[:description].present?
+      if extracted_recipe_data[:ingredients].any?
+        parts << "Ingredients: #{extracted_recipe_data[:ingredients].join(', ')}"
+      end
+      if extracted_recipe_data[:instructions].any?
+        parts << "Instructions: #{extracted_recipe_data[:instructions].join(' | ')}"
+      end
+      parts << "\nPlease structure this recipe according to user preferences and requirements."
+      parts << ""
+    end
+
+    # Add conversation context hints
+    if conversation_context[:greeting_needed] == false
+      parts << "NOTE: This is a follow-up message. Do NOT include a greeting - get straight to the point."
+    end
+
+    if conversation_context[:recent_changes].any?
+      parts << "Recent changes made: #{conversation_context[:recent_changes].join(', ')}"
+    end
+
+    # Add user message
+    parts << user_message.content
+
+    parts.join("\n")
+  end
+
+  # Validates allergen warnings and automatically fixes violations
+  # Uses RecipeFixService to implement a validation loop that fixes violations
+  #
+  # @param response [Hash] LLM response with recipe data
+  # @param user_message [Message] User message that triggered recipe generation
+  # @param ruby_llm_chat [RubyLLM::Chat] RubyLLM chat instance with conversation history
+  # @return [Hash] Fixed recipe data (or original if no violations)
+  def validate_allergen_warnings(response, user_message, ruby_llm_chat)
+    # Extract instructions from response
+    instructions = response.dig("content", "instructions") || []
+
+    # Extract requested ingredients from user message (simple extraction)
+    # This is a basic implementation - could be enhanced with NLP
+    requested_ingredients = extract_requested_ingredients(user_message.content)
+
+    # Get user allergies (convert hash to array of active allergy keys)
+    user_allergies = if current_user.allergies.is_a?(Hash)
+                       current_user.active_allergies
+                     else
+                       # Legacy format - parse as comma-separated string
+                       parse_user_field(current_user.allergies)
+                     end
+
+    # Validate
+    validation_result = Tools::AllergenWarningValidator.validate(
+      instructions: instructions,
+      user_allergies: user_allergies,
+      requested_ingredients: requested_ingredients
+    )
+
+    # If valid, return original response
+    return response if validation_result.valid?
+
+    # Log violations
+    Rails.logger.warn("AllergenWarningValidator: Violations detected")
+    validation_result.violations.each do |violation|
+      Rails.logger.warn("  - #{violation[:type]}: #{violation[:message]}")
+    end
+    Rails.logger.warn("  Fix instructions: #{validation_result.fix_instructions}")
+
+    # Attempt to fix violations automatically
+    Rails.logger.info("RecipeFixService: Attempting to fix violations automatically")
+    fixed_response = RecipeFixService.fix_violations(
+      recipe_data: response,
+      violations: validation_result.violations,
+      user_message: user_message,
+      chat: @chat,
+      current_user: current_user,
+      ruby_llm_chat: ruby_llm_chat
+    )
+
+    fixed_response
+  end
+
+  # Extracts requested ingredients from user message (basic implementation)
+  def extract_requested_ingredients(message)
+    # Simple pattern matching for common phrases
+    ingredients = []
+    message_lower = message.downcase
+
+    # Look for "add [ingredient]" patterns
+    message_lower.scan(/add\s+(?:more\s+)?([a-z\s]+?)(?:\s+to|\s+in|$|,|\.)/) do |match|
+      ingredients << match[0].strip if match[0].strip.length > 2
+    end
+
+    # Look for "with [ingredient]" patterns
+    message_lower.scan(/with\s+([a-z\s]+?)(?:\s+and|\s+or|$|,|\.)/) do |match|
+      ingredients << match[0].strip if match[0].strip.length > 2
+    end
+
+    ingredients.uniq
   end
 
   # Adds conversation history to RubyLLM chat instance
@@ -215,17 +477,19 @@ class RecipesController < ApplicationController
       - If any allergen is present AND the user did NOT explicitly request it: Remove it completely or find a suitable substitute
       - If the user EXPLICITLY requested an allergen (e.g., "add peanuts" when user is allergic to peanuts):#{' '}
         * Include it as requested
-        * ⚠️ ABSOLUTELY MANDATORY: You MUST add a prominent, personalized WARNING with the warning emoji (⚠️) in the recipe description field
+        * ⚠️ ABSOLUTELY MANDATORY: You MUST add a prominent, personalized WARNING with the warning emoji (⚠️) in the INSTRUCTION STEP where the allergen is added
+        * The warning MUST be in the instructions array, specifically in the step where you add the allergen ingredient
         * The warning MUST be personalized to the user's specific allergy - mention the exact allergen from their allergy list
         * The warning MUST include the warning emoji (⚠️) - this is REQUIRED, not optional
-        * Format: "⚠️ WARNING: This recipe contains [specific allergen name] which you are allergic to. Proceed with extreme caution"
-        * Example: If user is allergic to "nuts" and requests peanuts, the warning must say "⚠️ WARNING: This recipe contains peanuts (nuts) which you are allergic to. Proceed with extreme caution"
-        * The warning MUST appear at the BEGINNING or prominently in the recipe description field - it is NOT optional, it is MANDATORY
+        * Format: "⚠️ WARNING: This step contains [specific allergen name] which you are allergic to. Proceed with extreme caution"
+        * Example: If user is allergic to "nuts" and requests peanuts, and you add peanuts in step 1, the instruction must say: "⚠️ WARNING: This step contains peanuts (nuts) which you are allergic to. Proceed with extreme caution. In a large mixing bowl, combine the whole wheat flour, protein powder, baking powder, and chopped peanuts."
+        * The warning MUST appear in the SAME instruction step where the allergen is added - it is NOT optional, it is MANDATORY
         * The warning emoji (⚠️) MUST be included - do NOT omit it
+        * The word "WARNING" MUST be capitalized - use "⚠️ WARNING:" not "⚠️ warning:" or "⚠️ Warning:"
         * Do NOT use generic warnings like "common allergen" - it MUST be personalized to the user's specific allergy
-        * CRITICAL: Before returning the recipe, verify that the warning with emoji (⚠️) is actually in the description field
+        * CRITICAL: Before returning the recipe, verify that the warning with emoji (⚠️) and capitalized "WARNING:" is actually in the instruction step where the allergen is added
       - If allergens were removed/substituted (not explicitly requested): Document what was removed/substituted for transparency
-      - If allergens were included with warning (explicitly requested): The warning with emoji (⚠️) in the recipe description is ABSOLUTELY MANDATORY and must be personalized
+      - If allergens were included with warning (explicitly requested): The warning with emoji (⚠️) and capitalized "WARNING:" in the instruction step where the allergen is added is ABSOLUTELY MANDATORY and must be personalized
 
       2.2 PREFERENCE COMPLIANCE CHECK (HIGHLY IMPORTANT):
       - Review the recipe against the user's cooking preferences
@@ -267,11 +531,12 @@ class RecipesController < ApplicationController
       - Review the complete recipe one final time
       - Verify all requirements are met (allergies, preferences, appliances)
       - ⚠️ ABSOLUTELY CRITICAL: If an allergen was explicitly requested by the user, you MUST verify that:
-        * A personalized warning WITH the warning emoji (⚠️) is included in the recipe description field
+        * A personalized warning WITH the warning emoji (⚠️) and capitalized "WARNING:" is included in the INSTRUCTION STEP where the allergen is added
         * The warning emoji (⚠️) is present - check that it's actually there
+        * The word "WARNING" is capitalized - use "⚠️ WARNING:" format
         * The warning mentions the specific allergen from the user's allergy list (not generic)
-        * The warning is visible in the description field (at the beginning or prominently placed)
-        * If the warning with emoji is missing, you MUST add it before returning the recipe
+        * The warning is in the same instruction step where the allergen ingredient is mentioned
+        * If the warning with emoji and capitalized "WARNING:" is missing from the instruction step, you MUST add it before returning the recipe
       - Ensure the recipe is complete, coherent, and cookable
       - Confirm shopping list matches all ingredients needed
       - Verify message accurately reflects any adjustments made
@@ -306,9 +571,9 @@ class RecipesController < ApplicationController
       - If you removed or substituted allergy ingredients FROM THE ORIGINAL RECIPE: State which ingredients were avoided and what substitutes were used (e.g., "I've removed [allergen ingredient] and used [substitute] instead to keep it safe for you")
       - If the user explicitly requested an allergen and you added it with a warning:#{' '}
         * State that you've added it as requested
-        * Mention that a personalized warning is included in the recipe description
-        * Example: "I've added [allergen] as you requested. Please note there's a personalized warning in the recipe description about your allergy to [specific allergen name]."
-        * The warning in the recipe description is MANDATORY and must be personalized to the user's specific allergy
+        * Mention that a personalized warning is included in the instruction step where it's added
+        * Example: "I've added [allergen] as you requested. Please note there's a personalized warning in the instruction step where it's added about your allergy to [specific allergen name]."
+        * The warning in the instruction step is MANDATORY and must be personalized to the user's specific allergy
       - If you made modifications based on user's explicit request (add ingredient, reduce sweetness, etc.): Always mention what you changed (e.g., "I've added [ingredient] as you requested" or "I've reduced the sweetness by [specific change]")
       - If you adapted based on cooking preferences (HIGHLY IMPORTANT): Mention the specific change clearly (e.g., "I've replaced [original ingredient] with [preferred alternative] to match your preference for [preference detail]")
       - If you modified cooking methods for appliances: Mention the specific change (e.g., "I've adapted this to use your [available appliance] instead of [required appliance]")
@@ -352,9 +617,21 @@ class RecipesController < ApplicationController
     TEXT
 
     # Build allergies section
-    allergies = parse_user_field(user.allergies)
-    if allergies.any?
-      allergies_list = allergies.map { |a| "- #{a.capitalize}" }.join("\n")
+    # Get active allergies from hash format
+    active_allergies = if user.allergies.is_a?(Hash)
+                         user.allergies.select { |_key, value| value == true }.keys
+                       else
+                         # Legacy format - parse as comma-separated string
+                         parse_user_field(user.allergies)
+                       end
+
+    if active_allergies.any?
+      # Format allergy names for display (e.g., "tree_nuts" -> "Tree nuts")
+      allergies_list = active_allergies.map do |key|
+        formatted_name = key.to_s.tr("_", " ").split.map(&:capitalize).join(" ")
+        "- #{formatted_name}"
+      end.join("\n")
+
       sections << <<~TEXT
         CRITICAL DIETARY RESTRICTIONS - NEVER VIOLATE THESE:
         The user has the following allergies and intolerances. These ingredients MUST NEVER appear in any recipe, ingredient list, or shopping list:
@@ -507,16 +784,18 @@ class RecipesController < ApplicationController
       - If the user asks to "reduce sweetness" or modify quantities, DO IT
       - If the user requests an ingredient they're allergic to:#{' '}
         * Include it as requested
-        * ⚠️ ABSOLUTELY MANDATORY: Add a personalized WARNING WITH the warning emoji (⚠️) in the recipe description field
+        * ⚠️ ABSOLUTELY MANDATORY: Add a personalized WARNING WITH the warning emoji (⚠️) and capitalized "WARNING:" in the INSTRUCTION STEP where the allergen is added
+        * The warning MUST be in the instructions array, in the same step where you add the allergen ingredient
         * The warning MUST include the warning emoji (⚠️) - this is REQUIRED
+        * The word "WARNING" MUST be capitalized - use "⚠️ WARNING:" format
         * The warning MUST mention the specific allergen from the user's allergy list
-        * Format: "⚠️ WARNING: This recipe contains [specific allergen name] which you are allergic to. Proceed with extreme caution"
-        * The warning MUST be placed at the BEGINNING or prominently in the description field
-        * This warning with emoji is NOT optional - it MUST be included in the recipe description
-        * CRITICAL: Before returning, verify the warning with emoji (⚠️) is actually in the description field
+        * Format: "⚠️ WARNING: This step contains [specific allergen name] which you are allergic to. Proceed with extreme caution. [rest of instruction]"
+        * The warning MUST be placed at the BEGINNING of the instruction step where the allergen is added
+        * This warning with emoji and capitalized "WARNING:" is NOT optional - it MUST be included in the instruction step
+        * CRITICAL: Before returning, verify the warning with emoji (⚠️) and capitalized "WARNING:" is actually in the instruction step where the allergen is added
       - Make ONLY the changes the user requested
       - Update the recipe fields (title, description, content, shopping_list) with the modified recipe
-      - ⚠️ ABSOLUTELY CRITICAL: If you added an allergen, the warning WITH emoji (⚠️) MUST be in the description field - verify it's there with the emoji before returning
+      - ⚠️ ABSOLUTELY CRITICAL: If you added an allergen, the warning WITH emoji (⚠️) and capitalized "WARNING:" MUST be in the instruction step where the allergen is added - verify it's there with the emoji and capitalized "WARNING:" before returning
       - Set recipe_modified: true (CRITICAL: Set to true because you ARE modifying the recipe)
       - Set change_magnitude appropriately:
         * Use "significant" if ANY ingredients were added, removed, or changed (e.g., adding chocolate chips, removing an ingredient, replacing one ingredient with another, completely different dish type like meat dish → chocolate fudges)
@@ -546,14 +825,14 @@ class RecipesController < ApplicationController
       User: "add peanuts" (when user is allergic to nuts)
       → This is a CHANGE REQUEST (Category B)
       → Modify recipe to include peanuts
-      → ⚠️ ABSOLUTELY MANDATORY: Add personalized warning WITH emoji (⚠️) to recipe description: "⚠️ WARNING: This recipe contains peanuts (nuts) which you are allergic to. Proceed with extreme caution"
-      → The warning emoji (⚠️) MUST be included - verify it's in the description field
-      → Update recipe data with the change AND the warning WITH emoji in description
+      → ⚠️ ABSOLUTELY MANDATORY: Add personalized warning WITH emoji (⚠️) and capitalized "WARNING:" to the INSTRUCTION STEP where peanuts are added: "⚠️ WARNING: This step contains peanuts (nuts) which you are allergic to. Proceed with extreme caution. [rest of instruction]"
+      → The warning emoji (⚠️) and capitalized "WARNING:" MUST be included - verify it's in the instruction step where the allergen is added
+      → Update recipe data with the change AND the warning WITH emoji and capitalized "WARNING:" in the instruction step
       → Set recipe_modified: true
       → Set change_magnitude: "significant"
-      → Message: "I've added peanuts as you requested. Please note there's a personalized warning in the recipe description about your allergy to nuts." (NO greeting - this is a follow-up)
-      → ⚠️ CRITICAL: The warning WITH emoji (⚠️) MUST be in the recipe description field, not just mentioned in the message
-      → Before returning, verify the description field contains: "⚠️ WARNING: This recipe contains peanuts (nuts) which you are allergic to. Proceed with extreme caution"
+      → Message: "I've added peanuts as you requested. Please note there's a personalized warning in the instruction step where it's added about your allergy to nuts." (NO greeting - this is a follow-up)
+      → ⚠️ CRITICAL: The warning WITH emoji (⚠️) and capitalized "WARNING:" MUST be in the instruction step where the allergen is added, not in the description field
+      → Before returning, verify the instruction step contains: "⚠️ WARNING: This step contains peanuts (nuts) which you are allergic to. Proceed with extreme caution."
 
       User: "use 200g flour instead of 150g"
       → This is a CHANGE REQUEST (Category B)
