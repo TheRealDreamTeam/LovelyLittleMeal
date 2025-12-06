@@ -378,7 +378,7 @@ class RecipesController < ApplicationController
   end
 
   # Validates recipe and automatically fixes violations
-  # Validates both allergen warnings and appliance compatibility
+  # Validates allergen warnings, ingredient allergies, and appliance compatibility
   # Uses RecipeFixService to implement a validation loop that fixes violations
   #
   # @param response [Hash] LLM response with recipe data
@@ -390,11 +390,18 @@ class RecipesController < ApplicationController
     all_violations = []
     all_fix_instructions = []
 
-    # Validate allergen warnings
+    # Validate allergen warnings (for explicitly requested allergens)
     allergen_validation_result = validate_allergen_warnings_internal(response, user_message)
     all_violations.concat(allergen_validation_result.violations) if allergen_validation_result
     if allergen_validation_result && allergen_validation_result.fix_instructions.present?
       all_fix_instructions << allergen_validation_result.fix_instructions
+    end
+
+    # Validate ingredient allergies (check all ingredients against user allergies)
+    ingredient_allergy_result = validate_ingredient_allergies_internal(response, user_message)
+    all_violations.concat(ingredient_allergy_result.violations) if ingredient_allergy_result
+    if ingredient_allergy_result && ingredient_allergy_result.fix_instructions.present?
+      all_fix_instructions << ingredient_allergy_result.fix_instructions
     end
 
     # Validate appliance compatibility
@@ -449,6 +456,34 @@ class RecipesController < ApplicationController
     # Validate
     Tools::AllergenWarningValidator.validate(
       instructions: instructions,
+      user_allergies: user_allergies,
+      requested_ingredients: requested_ingredients
+    )
+  end
+
+  # Validates ingredient allergies (internal method)
+  #
+  # @param response [Hash] LLM response with recipe data
+  # @param user_message [Message] User message
+  # @return [ValidationResult] Validation result
+  def validate_ingredient_allergies_internal(response, user_message)
+    # Extract ingredients from response
+    ingredients = response.dig("content", "ingredients") || []
+
+    # Extract requested ingredients from user message
+    requested_ingredients = extract_requested_ingredients(user_message.content)
+
+    # Get user allergies (convert hash to array of active allergy keys)
+    user_allergies = if current_user.allergies.is_a?(Hash)
+                       current_user.active_allergies
+                     else
+                       # Legacy format - parse as comma-separated string
+                       parse_user_field(current_user.allergies)
+                     end
+
+    # Validate
+    Tools::IngredientAllergyChecker.validate(
+      ingredients: ingredients,
       user_allergies: user_allergies,
       requested_ingredients: requested_ingredients
     )
