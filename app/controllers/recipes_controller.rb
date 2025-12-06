@@ -410,17 +410,28 @@ class RecipesController < ApplicationController
   # Extracts requested ingredients from user message (basic implementation)
   def extract_requested_ingredients(message)
     # Simple pattern matching for common phrases
+    # Stops at filler words to avoid capturing phrases like "sesame anyway"
     ingredients = []
     message_lower = message.downcase
 
+    # Filler words that should stop ingredient extraction
+    filler_stop_words = %w[anyway please though still even just only]
+
     # Look for "add [ingredient]" patterns
-    message_lower.scan(/add\s+(?:more\s+)?([a-z\s]+?)(?:\s+to|\s+in|$|,|\.)/) do |match|
-      ingredients << match[0].strip if match[0].strip.length > 2
+    # Stop at filler words, punctuation, or common phrase endings
+    message_lower.scan(/add\s+(?:more\s+)?([a-z\s]+?)(?:\s+(?:#{filler_stop_words.join('|')})|\s+to|\s+in|$|,|\.)/) do |match|
+      ingredient = match[0].strip
+      # Remove any filler words that might have been captured
+      ingredient = ingredient.split.reject { |word| filler_stop_words.include?(word) }.join(" ")
+      ingredients << ingredient if ingredient.length > 2
     end
 
     # Look for "with [ingredient]" patterns
-    message_lower.scan(/with\s+([a-z\s]+?)(?:\s+and|\s+or|$|,|\.)/) do |match|
-      ingredients << match[0].strip if match[0].strip.length > 2
+    message_lower.scan(/with\s+([a-z\s]+?)(?:\s+(?:#{filler_stop_words.join('|')})|\s+and|\s+or|$|,|\.)/) do |match|
+      ingredient = match[0].strip
+      # Remove any filler words that might have been captured
+      ingredient = ingredient.split.reject { |word| filler_stop_words.include?(word) }.join(" ")
+      ingredients << ingredient if ingredient.length > 2
     end
 
     ingredients.uniq
@@ -483,6 +494,8 @@ class RecipesController < ApplicationController
         * The warning MUST include the warning emoji (⚠️) - this is REQUIRED, not optional
         * Format: "⚠️ WARNING: This step contains [specific allergen name] which you are allergic to. Proceed with extreme caution"
         * Example: If user is allergic to "nuts" and requests peanuts, and you add peanuts in step 1, the instruction must say: "⚠️ WARNING: This step contains peanuts (nuts) which you are allergic to. Proceed with extreme caution. In a large mixing bowl, combine the whole wheat flour, protein powder, baking powder, and chopped peanuts."
+        * CRITICAL: Use ONLY the clean allergen/ingredient name in the warning - do NOT include filler words from the user's message (e.g., if user says "add sesame anyway", use "sesame" not "sesame anyway")
+        * CRITICAL: Do NOT duplicate "Proceed with extreme caution" - it should appear only once in the warning
         * The warning MUST appear in the SAME instruction step where the allergen is added - it is NOT optional, it is MANDATORY
         * The warning emoji (⚠️) MUST be included - do NOT omit it
         * The word "WARNING" MUST be capitalized - use "⚠️ WARNING:" not "⚠️ warning:" or "⚠️ Warning:"
