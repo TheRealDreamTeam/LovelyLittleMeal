@@ -192,6 +192,7 @@ class RecipeFixService
   end
 
   # Extracts allergen name for warning text
+  # Cleans up ingredient names to remove filler words and use proper allergen names
   #
   # @param requested_allergens [Array<String>] Requested allergens (may include ingredient in parentheses)
   # @param user_allergies [Array<String>] User's active allergies
@@ -199,17 +200,31 @@ class RecipeFixService
   def self.extract_allergen_name_for_warning(requested_allergens, user_allergies)
     return "the allergen" if requested_allergens.empty?
 
+    # Filler words to remove from ingredient names
+    filler_words = %w[anyway please add with to the a an some more]
+
     # Extract allergen names (handle "allergen (ingredient)" format)
     allergen_names = requested_allergens.map do |item|
       if item.include?("(")
-        # Format: "tree_nuts (peanuts)" -> "peanuts (tree nuts)"
+        # Format: "sesame (sesame anyway)" -> "sesame (Sesame)"
         parts = item.split("(")
         allergen = parts[0].strip
         ingredient = parts[1].delete(")").strip
-        # Format for display: "peanuts (tree nuts)"
-        "#{ingredient} (#{format_allergen_name(allergen)})"
+        
+        # Clean up ingredient name - remove filler words and normalize
+        cleaned_ingredient = clean_ingredient_name(ingredient, filler_words)
+        
+        # If cleaned ingredient matches allergen, just use allergen name
+        if cleaned_ingredient.downcase == allergen.downcase || cleaned_ingredient.downcase.include?(allergen.downcase)
+          format_allergen_name(allergen)
+        else
+          # Format for display: "peanuts (tree nuts)" or just "sesame" if they match
+          "#{cleaned_ingredient} (#{format_allergen_name(allergen)})"
+        end
       else
-        format_allergen_name(item)
+        # Clean up the allergen name itself
+        cleaned = clean_ingredient_name(item, filler_words)
+        format_allergen_name(cleaned)
       end
     end
 
@@ -219,6 +234,24 @@ class RecipeFixService
     else
       "#{allergen_names[0..-2].join(', ')} and #{allergen_names.last}"
     end
+  end
+
+  # Cleans ingredient names by removing filler words and normalizing
+  #
+  # @param ingredient [String] Raw ingredient name (e.g., "sesame anyway")
+  # @param filler_words [Array<String>] Words to remove
+  # @return [String] Cleaned ingredient name (e.g., "sesame")
+  def self.clean_ingredient_name(ingredient, filler_words = [])
+    return ingredient if ingredient.blank?
+
+    # Split into words, remove filler words, and rejoin
+    words = ingredient.split
+    cleaned_words = words.reject { |word| filler_words.include?(word.downcase) }
+    
+    # If we removed all words, return the original (shouldn't happen, but safety check)
+    return ingredient if cleaned_words.empty?
+    
+    cleaned_words.join(" ").strip
   end
 
   # Formats allergen key to human-readable name
@@ -372,16 +405,19 @@ class RecipeFixService
       1. Allergen warnings MUST be in the INSTRUCTION STEP where the allergen is added, NOT in the description
       2. The warning MUST start with "⚠️ WARNING:" (capitalized, not "warning" or "Warning") at the BEGINNING of the instruction step
       3. The warning MUST mention the specific allergen from the user's allergy list
-      4. You MUST fix ALL violations listed above - check each step mentioned
-      5. Do NOT add warnings to steps that don't contain the allergen
-      6. Do NOT remove warnings from steps that already have them correctly formatted
+      4. Use ONLY clean allergen/ingredient names - do NOT include filler words from user messages (e.g., use "sesame" not "sesame anyway")
+      5. The phrase "Proceed with extreme caution" must appear EXACTLY ONCE - do NOT duplicate it
+      6. You MUST fix ALL violations listed above - check each step mentioned
+      7. Do NOT add warnings to steps that don't contain the allergen
+      8. Do NOT remove warnings from steps that already have them correctly formatted
 
       Return the COMPLETE fixed recipe with ALL fields (title, description, content, shopping_list, recipe_summary_for_prompt, recipe_modified, change_magnitude, message).
       Do NOT change anything that wasn't mentioned in the violations - only fix the violations.
       
       After fixing, verify that:
       - Each step mentioned in violations now has "⚠️ WARNING:" at the beginning
-      - The warning mentions the specific allergen
+      - The warning mentions the specific allergen (clean name, no filler words)
+      - "Proceed with extreme caution" appears exactly once (not duplicated)
       - No warnings are in the description field (they should only be in instruction steps)
     PROMPT
   end
@@ -422,14 +458,24 @@ class RecipeFixService
     ingredients = []
     message_lower = message.downcase
 
+    # Filler words that should stop ingredient extraction
+    filler_stop_words = %w[anyway please though still even just only]
+
     # Look for "add [ingredient]" patterns
-    message_lower.scan(/add\s+(?:more\s+)?([a-z\s]+?)(?:\s+to|\s+in|$|,|\.)/) do |match|
-      ingredients << match[0].strip if match[0].strip.length > 2
+    # Stop at filler words, punctuation, or common phrase endings
+    message_lower.scan(/add\s+(?:more\s+)?([a-z\s]+?)(?:\s+(?:#{filler_stop_words.join('|')})|\s+to|\s+in|$|,|\.)/) do |match|
+      ingredient = match[0].strip
+      # Remove any filler words that might have been captured
+      ingredient = ingredient.split.reject { |word| filler_stop_words.include?(word) }.join(" ")
+      ingredients << ingredient if ingredient.length > 2
     end
 
     # Look for "with [ingredient]" patterns
-    message_lower.scan(/with\s+([a-z\s]+?)(?:\s+and|\s+or|$|,|\.)/) do |match|
-      ingredients << match[0].strip if match[0].strip.length > 2
+    message_lower.scan(/with\s+([a-z\s]+?)(?:\s+(?:#{filler_stop_words.join('|')})|\s+and|\s+or|$|,|\.)/) do |match|
+      ingredient = match[0].strip
+      # Remove any filler words that might have been captured
+      ingredient = ingredient.split.reject { |word| filler_stop_words.include?(word) }.join(" ")
+      ingredients << ingredient if ingredient.length > 2
     end
 
     ingredients.uniq
