@@ -378,7 +378,7 @@ class RecipesController < ApplicationController
   end
 
   # Validates recipe and automatically fixes violations
-  # Validates both allergen warnings and appliance compatibility
+  # Validates allergen warnings, ingredient allergies, and appliance compatibility
   # Uses RecipeFixService to implement a validation loop that fixes violations
   #
   # @param response [Hash] LLM response with recipe data
@@ -390,11 +390,36 @@ class RecipesController < ApplicationController
     all_violations = []
     all_fix_instructions = []
 
-    # Validate allergen warnings
+    # Validate allergen warnings (for explicitly requested allergens)
     allergen_validation_result = validate_allergen_warnings_internal(response, user_message)
     all_violations.concat(allergen_validation_result.violations) if allergen_validation_result
     if allergen_validation_result && allergen_validation_result.fix_instructions.present?
       all_fix_instructions << allergen_validation_result.fix_instructions
+    end
+
+    # Validate ingredient allergies (check all ingredients against user allergies)
+    ingredient_allergy_result = validate_ingredient_allergies_internal(response, user_message)
+    all_violations.concat(ingredient_allergy_result.violations) if ingredient_allergy_result
+    if ingredient_allergy_result && ingredient_allergy_result.fix_instructions.present?
+      all_fix_instructions << ingredient_allergy_result.fix_instructions
+    end
+
+    # Validate metric units and shopping list
+    metric_unit_result = validate_metric_units_internal(response)
+    all_violations.concat(metric_unit_result.violations) if metric_unit_result
+    if metric_unit_result && metric_unit_result.fix_instructions.present?
+      all_fix_instructions << metric_unit_result.fix_instructions
+    end
+    # Store converted data for programmatic fixes
+    if metric_unit_result
+      all_violations.each do |violation|
+        next unless violation[:type].to_s.start_with?("non_metric", "unrealistic_shopping")
+
+        violation[:converted_data] = {
+          ingredients: metric_unit_result.instance_variable_get(:@converted_ingredients),
+          shopping_list: metric_unit_result.instance_variable_get(:@converted_shopping_list)
+        }
+      end
     end
 
     # Validate appliance compatibility
@@ -451,6 +476,50 @@ class RecipesController < ApplicationController
       instructions: instructions,
       user_allergies: user_allergies,
       requested_ingredients: requested_ingredients
+    )
+  end
+
+  # Validates ingredient allergies (internal method)
+  #
+  # @param response [Hash] LLM response with recipe data
+  # @param user_message [Message] User message
+  # @return [ValidationResult] Validation result
+  def validate_ingredient_allergies_internal(response, user_message)
+    # Extract ingredients from response
+    ingredients = response.dig("content", "ingredients") || []
+
+    # Extract requested ingredients from user message
+    requested_ingredients = extract_requested_ingredients(user_message.content)
+
+    # Get user allergies (convert hash to array of active allergy keys)
+    user_allergies = if current_user.allergies.is_a?(Hash)
+                       current_user.active_allergies
+                     else
+                       # Legacy format - parse as comma-separated string
+                       parse_user_field(current_user.allergies)
+                     end
+
+    # Validate
+    Tools::IngredientAllergyChecker.validate(
+      ingredients: ingredients,
+      user_allergies: user_allergies,
+      requested_ingredients: requested_ingredients
+    )
+  end
+
+  # Validates metric units and shopping list (internal method)
+  #
+  # @param response [Hash] LLM response with recipe data
+  # @return [ValidationResult] Validation result
+  def validate_metric_units_internal(response)
+    # Extract ingredients and shopping list from response
+    ingredients = response.dig("content", "ingredients") || []
+    shopping_list = response["shopping_list"] || []
+
+    # Validate
+    Tools::MetricUnitValidator.validate(
+      ingredients: ingredients,
+      shopping_list: shopping_list
     )
   end
 
@@ -730,10 +799,23 @@ class RecipesController < ApplicationController
       - If recipe already uses available appliances (no change needed): Do NOT mention appliances at all
       - If no adjustments needed: Simply present the recipe with your warm, encouraging chef persona, no mention of adjustments/preferences/appliances/allergies
 
-      SHOPPING LIST FORMAT:
-      The shopping_list must be a simple array of strings. Each string should include both the quantity (in metric units) and the item name.
-      Example: ["200g ingredient", "50g another ingredient", "2 pieces of produce", "15ml liquid"]
-      Always use metric units (g, ml, pieces, etc.) - never use teaspoons, pinches, or other non-metric measurements.
+      SHOPPING LIST FORMAT (CRITICAL - REALISTIC PURCHASE AMOUNTS):
+      The shopping_list must be a simple array of strings with REALISTIC purchase amounts.
+
+      CRITICAL RULES:
+      - Always use metric units (g, ml, pieces, heads, bulbs, loaves, etc.) - NEVER use teaspoons, pinches, dashes, cloves, or slices
+      - Use REALISTIC purchase amounts - do NOT include tiny amounts like "2g black pepper" or "1 teaspoon olive oil"
+      - For spices (pepper, salt, etc.): Just use the spice name without amount (e.g., "black pepper") or use realistic container size (e.g., "50g black pepper")
+      - For garlic: Use "1 head garlic" or "1 bulb garlic" - NEVER "1 clove garlic" (you can't buy a single clove)
+      - For bread: Use "1 loaf [bread type]" - NEVER "2 slices bread" (you can't buy individual slices)
+      - For oils/vinegars: Use realistic bottle sizes (e.g., "250ml olive oil", not "1 teaspoon olive oil")
+      - For small amounts needed in recipe: Convert to realistic purchase sizes (e.g., if recipe needs 5ml oil, shopping list should say "250ml olive oil")
+
+      Examples:
+      - ✅ CORRECT: ["200g flour", "1 head garlic", "250ml olive oil", "black pepper", "2 pieces chicken", "1 loaf whole wheat bread"]
+      - ❌ WRONG: ["2g black pepper", "1 clove garlic", "1 teaspoon olive oil", "1 pinch salt", "2 slices whole wheat bread"]
+
+      Recipe ingredients can use teaspoons/pinches for cooking, but shopping list MUST use realistic purchase amounts.
     TEXT
 
     # Append user's custom system prompt if present

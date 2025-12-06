@@ -269,36 +269,74 @@ All Phase 1 tools have been implemented and integrated. Recent updates:
 5. Write tests
 6. Integrate into validation phase
 
-**Files to Create**:
-- `app/lib/tools/ingredient_allergy_checker.rb`
-- `spec/lib/tools/ingredient_allergy_checker_spec.rb`
+**Files Created**:
+- `app/lib/tools/ingredient_allergy_checker.rb` ✅
+- `spec/lib/tools/ingredient_allergy_checker_spec.rb` (tests pending)
+
+**Files Modified**:
+- `app/controllers/recipes_controller.rb` ✅
+
+**Status**: ✅ **COMPLETED** (Implementation done, tests pending)
+
+**Implementation Details**:
+- Uses pure Ruby validation (no LLM call) for 100% reliability
+- Checks all ingredients against user's active allergies
+- Handles edge cases with allergen-to-ingredient mappings (e.g., "peanut" matches "peanuts", "peanut butter", etc.)
+- Distinguishes between explicitly requested allergens (handled by AllergenWarningValidator) vs unexpected allergens (should be removed/substituted)
+- Provides substitute suggestions for each detected allergen
+- Filters substitute suggestions to avoid recommending allergens the user is also allergic to
+- Integrated into unified `validate_recipe` method alongside other validators
+- Violations are aggregated and fixed together
 
 **Acceptance Criteria**:
-- [ ] Tool detects allergen violations
-- [ ] Tool handles edge cases correctly
-- [ ] Tool suggests substitutes
-- [ ] All tests pass
+- [x] Tool detects allergen violations
+- [x] Tool handles edge cases correctly (peanuts vs tree_nuts, etc.)
+- [x] Tool suggests substitutes
+- [x] Integrated into validation phase
+- [ ] All tests pass (tests pending)
 
 ---
 
 ### Step 2.3: Implement MetricUnitValidator Tool
-**Goal**: Ensure all quantities use metric units
+**Goal**: Ensure all quantities use metric units and shopping list has realistic purchase amounts
 
 **Tasks**:
 1. Create tool class
 2. Implement regex/pattern matching for non-metric units
 3. Provide automatic conversions
-4. Write tests
-5. Integrate into validation phase
+4. Validate shopping list for realistic purchase amounts
+5. Write tests
+6. Integrate into validation phase
 
-**Files to Create**:
-- `app/lib/tools/metric_unit_validator.rb`
-- `spec/lib/tools/metric_unit_validator_spec.rb`
+**Files Created**:
+- `app/lib/tools/metric_unit_validator.rb` ✅
+- `spec/lib/tools/metric_unit_validator_spec.rb` (tests pending)
+
+**Files Modified**:
+- `app/controllers/recipes_controller.rb` ✅
+- `app/services/recipe_fix_service.rb` ✅
+
+**Status**: ✅ **COMPLETED** (Implementation done, tests pending)
+
+**Implementation Details**:
+- Uses pure Ruby validation (no LLM call) for 100% reliability
+- Converts non-metric units to metric (cups -> ml, teaspoons -> ml, ounces -> g, etc.)
+- Validates shopping list for realistic purchase amounts:
+  - Removes unrealistic small amounts (e.g., "2g black pepper" -> "black pepper")
+  - Converts "1 clove garlic" to "1 head garlic"
+  - Converts "1 teaspoon olive oil" to "250ml olive oil"
+  - Removes teaspoons, pinches, dashes, cloves from shopping list
+- Applies conversions programmatically (no LLM call needed)
+- Integrated into unified `validate_recipe` method
+- System prompt updated with clear shopping list requirements
 
 **Acceptance Criteria**:
-- [ ] Tool detects non-metric units
-- [ ] Tool provides conversions
-- [ ] All tests pass
+- [x] Tool detects non-metric units
+- [x] Tool provides conversions
+- [x] Tool validates shopping list for realistic amounts
+- [x] Conversions applied programmatically
+- [x] Integrated into validation phase
+- [ ] All tests pass (tests pending)
 
 ---
 
