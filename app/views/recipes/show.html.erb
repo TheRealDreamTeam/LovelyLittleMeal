@@ -15,7 +15,7 @@
   <% content_for :og_image, absolute_url_for(@recipe.image) %>
 <% else %>
   <%# Fallback to LLM OG logo if no recipe image %>
-  <% content_for :og_image, public_file_url('llm-og-logo.jpg') %>
+  <% content_for :og_image, public_file_url('llm-og-logo.svg') %>
 <% end %>
 
 <% left_content = capture do %>
