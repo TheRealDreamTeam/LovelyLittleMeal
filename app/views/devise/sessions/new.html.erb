@@ -2,7 +2,7 @@
   <div class="auth-card p-4 shadow-sm bg-white rounded" style="max-width: 400px; width: 100%;">
     <h2 class="mb-4 text-center">Log in</h2>
 
-    <%= simple_form_for(resource, as: resource_name, url: session_path(resource_name)) do |f| %>
+    <%= simple_form_for(resource, as: resource_name, url: session_path(resource_name), data: { turbo: false }) do |f| %>
 
       <div class="form-inputs mb-3">
         <%= f.input :email,
