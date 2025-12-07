@@ -74,7 +74,15 @@
     <%# JavaScript %>
     <%= javascript_importmap_tags %>
   </head>
-  <body class="d-flex flex-column" style="height: 100dvh; overflow: hidden;" data-controller="orientation">
+  <%# Add body class to hide burger button on auth pages, landing, and wizard %>
+  <% hide_burger = controller_name == 'wizard' || 
+                   (controller_name == 'pages' && action_name == 'landing') ||
+                   request.path.start_with?('/users/sign_in') ||
+                   request.path.start_with?('/users/sign_up') ||
+                   request.path.start_with?('/users/password') ||
+                   request.path.start_with?('/users/confirmation') ||
+                   request.path.start_with?('/users/unlock') %>
+  <body class="d-flex flex-column <%= 'hide-navbar-burger' if hide_burger %>" style="height: 100dvh; overflow: hidden;" data-controller="orientation">
     <%= link_to "Skip to main content", "#main-content", class: "visually-hidden-focusable" %>
     <header class="flex-shrink-0">
       <%= render "shared/navbar" %>
