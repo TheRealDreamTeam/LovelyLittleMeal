@@ -1,13 +1,73 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
-    <title>LovelyLittleMeal</title>
+    <%# Basic Meta Tags %>
+    <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title><%= content_for?(:title) ? "#{content_for(:title)} | LovelyLittleMeal" : "LovelyLittleMeal" %></title>
+    
+    <%# SEO Meta Tags %>
+    <meta name="description" content="<%= content_for?(:description) ? content_for(:description) : 'Personalized recipes for every occasion!' %>">
+    <meta name="keywords" content="recipes, cooking, meal planning, personalized recipes, allergy-friendly recipes, recipe generator, AI recipes">
+    <meta name="author" content="LovelyLittleMeal">
+    <meta name="robots" content="index, follow">
+    <meta name="language" content="English">
+    <link rel="canonical" href="<%= request.original_url %>">
+    
+    <%# Theme and Mobile %>
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="LovelyLittleMeal">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <%# Favicon and App Icons %>
+    <%# Using chef-hat.png from public directory as favicon %>
+    <%# Files in public/ are served directly, so use root-relative path %>
+    <link rel="icon" type="image/png" href="/chef-hat.png">
+    <link rel="shortcut icon" type="image/png" href="/chef-hat.png">
+    <link rel="apple-touch-icon" href="/chef-hat.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/chef-hat.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/chef-hat.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/chef-hat.png">
+    
+    <%# Security %>
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
+    
+    <%# Performance: Preconnect to external domains %>
+    <link rel="preconnect" href="https://res.cloudinary.com">
+    <link rel="dns-prefetch" href="https://res.cloudinary.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
+    
+    <%# Open Graph / Facebook / Twitter meta tags for social sharing %>
+    <% og_image = content_for?(:og_image) ? content_for(:og_image) : 'https://res.cloudinary.com/dao1vxhsu/image/upload/v1764934638/logo_no_background_aszsab.png' %>
+    
+    <meta property="og:type" content="<%= content_for?(:og_type) ? content_for(:og_type) : 'website' %>">
+    <meta property="og:url" content="<%= request.original_url %>">
+    <meta property="og:title" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal - Personalized Recipe Generator' %>">
+    <meta property="og:description" content="<%= content_for?(:og_description) ? content_for(:og_description) : 'Personalized recipes for every occasion!' %>">
+    <meta property="og:image" content="<%= og_image %>">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal' %>">
+    <meta property="og:site_name" content="LovelyLittleMeal">
+    <meta property="og:locale" content="en_US">
+    
+    <%# Twitter Card tags %>
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal - Personalized Recipe Generator' %>">
+    <meta name="twitter:description" content="<%= content_for?(:og_description) ? content_for(:og_description) : 'Personalized recipes for every occasion!' %>">
+    <meta name="twitter:image" content="<%= og_image %>">
+    <meta name="twitter:image:alt" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal' %>">
+    
+    <%# Stylesheets %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 
+    <%# JavaScript %>
     <%= javascript_importmap_tags %>
   </head>
   <body class="d-flex flex-column" style="height: 100vh; overflow: hidden;">

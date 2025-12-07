@@ -1,6 +1,23 @@
 <%# Subscribe to Turbo Stream updates for this recipe %>
 <%= turbo_stream_from "recipe_#{@recipe.id}" %>
 
+<%# Set meta tags for recipe page (SEO and social sharing) %>
+<% recipe_title = @recipe.title.present? && @recipe.title != "Untitled" ? @recipe.title : "Recipe" %>
+<% recipe_description = @recipe.description.present? && @recipe.description != "Nothing here yet..." ? @recipe.description : "A personalized recipe created with LovelyLittleMeal" %>
+
+<% content_for :title, recipe_title %>
+<% content_for :description, recipe_description %>
+<% content_for :og_type, "article" %>
+<% content_for :og_title, recipe_title %>
+<% content_for :og_description, recipe_description %>
+<% if @recipe.image.attached? %>
+  <%# Use absolute URL for OG tags (works with both local storage and Cloudinary) %>
+  <% content_for :og_image, absolute_url_for(@recipe.image) %>
+<% else %>
+  <%# Fallback to app logo if no recipe image %>
+  <% content_for :og_image, "https://res.cloudinary.com/dao1vxhsu/image/upload/v1764934638/logo_no_background_aszsab.png" %>
+<% end %>
+
 <% left_content = capture do %>
   <div id="recipe-details" class="overflow-y-auto flex-grow-1" style="min-height: 0;">
     <%= render "recipes/details", recipe: @recipe %>

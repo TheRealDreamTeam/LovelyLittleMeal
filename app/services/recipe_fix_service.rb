@@ -110,8 +110,7 @@ class RecipeFixService
   def self.apply_programmatic_fixes(recipe_data:, violations:, user_message:, current_user:)
     fixed_data = recipe_data.deep_dup
     instructions = fixed_data.dig("content", "instructions") || []
-    return fixed_data if instructions.empty?
-
+    
     # Get user allergies for warning text
     user_allergies = if current_user.allergies.is_a?(Hash)
                        current_user.active_allergies
@@ -138,58 +137,88 @@ class RecipeFixService
     # Get allergen name for warning text
     allergen_name = extract_allergen_name_for_warning(requested_allergens, user_allergies)
 
-    # Group violations by step number
-    violations_by_step = violations.group_by do |violation|
-      step_match = violation[:message].match(/step (\d+)/i)
-      step_match ? step_match[1].to_i - 1 : nil # Convert to 0-based index
+    # Separate violations by type
+    allergen_violations = violations.select { |v| [:missing_emoji, :incorrect_warning_format, :generic_warning].include?(v[:type]) }
+    shopping_list_violations = violations.select { |v| [:non_metric_unit_in_shopping_list, :unrealistic_shopping_amount].include?(v[:type]) }
+    ingredient_violations = violations.select { |v| v[:type] == :non_metric_unit_in_ingredients }
+
+    # Fix shopping list violations programmatically (using converted data from validator)
+    if shopping_list_violations.any?
+      # Get converted shopping list from the first violation (they all have the same converted data)
+      converted_shopping_list = shopping_list_violations.first[:converted_data]&.dig(:shopping_list)
+      if converted_shopping_list && converted_shopping_list.any?
+        fixed_data["shopping_list"] = converted_shopping_list
+        Rails.logger.info("RecipeFixService: Programmatically fixed shopping list (#{shopping_list_violations.length} violation(s))")
+        Rails.logger.info("RecipeFixService: Shopping list updated to: #{converted_shopping_list.inspect}")
+      end
     end
 
-    # Fix each step
-    violations_by_step.each do |step_index, step_violations|
-      next unless step_index && step_index >= 0 && step_index < instructions.length
+    # Fix ingredient violations programmatically (using converted data from validator)
+    if ingredient_violations.any?
+      # Get converted ingredients from the first violation
+      converted_ingredients = ingredient_violations.first[:converted_data]&.dig(:ingredients)
+      if converted_ingredients && converted_ingredients.any?
+        fixed_data["content"] ||= {}
+        fixed_data["content"]["ingredients"] = converted_ingredients
+        Rails.logger.info("RecipeFixService: Programmatically fixed ingredients (#{ingredient_violations.length} violation(s))")
+      end
+    end
 
-      instruction = instructions[step_index].dup
-      original_instruction = instruction.dup
-
-      step_violations.each do |violation|
-        case violation[:type]
-        when :missing_emoji
-          # Prepend warning to instruction step
-          # Only add if not already present
-          unless instruction.include?("⚠️") && instruction.include?("WARNING:")
-            warning_text = "⚠️ WARNING: This step contains #{allergen_name} which you are allergic to. Proceed with extreme caution. "
-            instruction = warning_text + instruction
-            Rails.logger.info("RecipeFixService: Programmatically added warning to step #{step_index + 1}")
-          end
-
-        when :incorrect_warning_format
-          # Fix capitalization of WARNING
-          instruction = instruction.gsub(/⚠️\s*(warning|Warning):/i, "⚠️ WARNING:")
-          if instruction != original_instruction
-            Rails.logger.info("RecipeFixService: Programmatically fixed WARNING format in step #{step_index + 1}")
-          end
-
-        when :generic_warning
-          # Update warning to include specific allergen name
-          if instruction.include?("⚠️") && instruction.include?("WARNING:")
-            # Replace generic warning text with specific allergen
-            # Pattern: "⚠️ WARNING: [generic text]. [rest of instruction]"
-            # Replace with: "⚠️ WARNING: This step contains [allergen] which you are allergic to. Proceed with extreme caution. [rest]"
-            instruction = instruction.sub(
-              /(⚠️\s*WARNING:\s*)[^.]*(\.\s*)/i,
-              "\\1This step contains #{allergen_name} which you are allergic to. Proceed with extreme caution. "
-            )
-            Rails.logger.info("RecipeFixService: Programmatically updated warning to include specific allergen in step #{step_index + 1}")
-          end
-        end
+    # Fix allergen warning violations (only if we have instructions)
+    if allergen_violations.any? && instructions.any?
+      # Group violations by step number
+      violations_by_step = allergen_violations.group_by do |violation|
+        step_match = violation[:message].match(/step (\d+)/i)
+        step_match ? step_match[1].to_i - 1 : nil # Convert to 0-based index
       end
 
-      instructions[step_index] = instruction
-    end
+      # Fix each step
+      violations_by_step.each do |step_index, step_violations|
+        next unless step_index && step_index >= 0 && step_index < instructions.length
 
-    # Update recipe data with fixed instructions
-    fixed_data["content"] ||= {}
-    fixed_data["content"]["instructions"] = instructions
+        instruction = instructions[step_index].dup
+        original_instruction = instruction.dup
+
+        step_violations.each do |violation|
+          case violation[:type]
+          when :missing_emoji
+            # Prepend warning to instruction step
+            # Only add if not already present
+            unless instruction.include?("⚠️") && instruction.include?("WARNING:")
+              warning_text = "⚠️ WARNING: This step contains #{allergen_name} which you are allergic to. Proceed with extreme caution. "
+              instruction = warning_text + instruction
+              Rails.logger.info("RecipeFixService: Programmatically added warning to step #{step_index + 1}")
+            end
+
+          when :incorrect_warning_format
+            # Fix capitalization of WARNING
+            instruction = instruction.gsub(/⚠️\s*(warning|Warning):/i, "⚠️ WARNING:")
+            if instruction != original_instruction
+              Rails.logger.info("RecipeFixService: Programmatically fixed WARNING format in step #{step_index + 1}")
+            end
+
+          when :generic_warning
+            # Update warning to include specific allergen name
+            if instruction.include?("⚠️") && instruction.include?("WARNING:")
+              # Replace generic warning text with specific allergen
+              # Pattern: "⚠️ WARNING: [generic text]. [rest of instruction]"
+              # Replace with: "⚠️ WARNING: This step contains [allergen] which you are allergic to. Proceed with extreme caution. [rest]"
+              instruction = instruction.sub(
+                /(⚠️\s*WARNING:\s*)[^.]*(\.\s*)/i,
+                "\\1This step contains #{allergen_name} which you are allergic to. Proceed with extreme caution. "
+              )
+              Rails.logger.info("RecipeFixService: Programmatically updated warning to include specific allergen in step #{step_index + 1}")
+            end
+          end
+        end
+
+        instructions[step_index] = instruction
+      end
+
+      # Update recipe data with fixed instructions
+      fixed_data["content"] ||= {}
+      fixed_data["content"]["instructions"] = instructions
+    end
 
     fixed_data
   end
@@ -426,14 +455,17 @@ class RecipeFixService
   end
 
   # Validates the fixed recipe to check if violations are resolved
+  # Re-runs all validations to ensure programmatic fixes worked
   #
   # @param recipe_data [Hash] Fixed recipe data
   # @param user_message [Message] Original user message
   # @param current_user [User] Current user
-  # @return [ValidationResult] Validation result
+  # @return [ValidationResult] Aggregated validation result
   def self.validate_fixed_recipe(recipe_data:, user_message:, current_user:)
-    # Extract instructions
+    # Extract data
     instructions = recipe_data.dig("content", "instructions") || []
+    ingredients = recipe_data.dig("content", "ingredients") || []
+    shopping_list = recipe_data["shopping_list"] || []
 
     # Extract requested ingredients
     requested_ingredients = extract_requested_ingredients(user_message.content)
@@ -445,11 +477,33 @@ class RecipeFixService
                        []
                      end
 
-    # Validate using AllergenWarningValidator
-    Tools::AllergenWarningValidator.validate(
-      instructions: instructions,
-      user_allergies: user_allergies,
-      requested_ingredients: requested_ingredients
+    # Get user appliances
+    available_appliances = if current_user.appliances.is_a?(Hash)
+                             current_user.active_appliances
+                           else
+                             []
+                           end.map(&:downcase)
+
+    # Calculate unavailable appliances
+    unavailable_appliances = RecipesController::AVAILABLE_APPLIANCES.keys.reject { |key| available_appliances.include?(key.downcase) }
+
+    # Re-run all validations to check if fixes worked
+    # We check all validations to ensure programmatic fixes resolved the issues
+    aggregated_results = RecipeValidator.validate_all(
+      recipe_data: recipe_data,
+      user: current_user,
+      user_message: user_message,
+      requested_ingredients: requested_ingredients,
+      available_appliances: available_appliances,
+      unavailable_appliances: unavailable_appliances,
+      user_allergies: user_allergies
+    )
+
+    # Return proper ValidationResult structure
+    violations = aggregated_results[:violations] || []
+    Tools::BaseTool.validation_result(
+      valid: violations.empty?,
+      violations: violations
     )
   end
 
