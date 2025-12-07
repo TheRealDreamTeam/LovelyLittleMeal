@@ -18,7 +18,8 @@
                   class: "form-control",
                   placeholder: "E.g. 32",
                   min: 1,
-                  max: 150 %>
+                  max: 150,
+                  style: "border-radius: 12px; height: 38px;" %>
           </div>
 
           <!-- Weight -->
@@ -29,7 +30,8 @@
                   placeholder: "E.g. 68",
                   min: 1,
                   max: 500,
-                  step: 0.1 %>
+                  step: 0.1,
+                  style: "border-radius: 12px; height: 38px;" %>
           </div>
 
           <!-- Height -->
@@ -39,7 +41,8 @@
                   class: "form-control",
                   placeholder: "E.g. 175",
                   min: 50,
-                  max: 250 %>
+                  max: 250,
+                  style: "border-radius: 12px; height: 38px;" %>
           </div>
         </div>
 
@@ -188,42 +191,9 @@
 
       <div class="border-top my-4"></div>
 
-      <!-- Appliances and Allergies Section (Side by Side) -->
+      <!-- Allergies and Appliances Section (Side by Side) -->
       <div class="row g-4 mb-4">
-        <!-- Appliances Section -->
-        <div class="col-12 col-lg-6">
-          <h5 class="mb-3">Available Appliances</h5>
-          <p class="text-muted small mb-3">Select all appliances you have access to. Recipes will only use these appliances.</p>
-          
-        <% # Get current appliances (handle both hash and legacy formats)
-           # Set defaults: stove, oven, kettle if appliances is empty
-           default_appliances = %w[stove oven kettle]
-           current_appliances = if @user.appliances.is_a?(Hash) && @user.appliances.any?
-                                     @user.appliances
-                                   else
-                                     # Set defaults for new users or users with empty appliances
-                                     User::STANDARD_APPLIANCES.each_with_object({}) do |a, h|
-                                       h[a] = default_appliances.include?(a)
-                                     end
-                                   end %>
-
-          <div class="d-flex flex-column gap-2">
-            <% User::STANDARD_APPLIANCES.each do |appliance_key| %>
-              <div class="form-check">
-                <%= check_box_tag "user[appliances][#{appliance_key}]",
-                                  1,
-                                  current_appliances[appliance_key.to_s] == true || current_appliances[appliance_key.to_sym] == true,
-                                  id: "user_appliances_#{appliance_key}",
-                                  class: "form-check-input" %>
-                <%= label_tag "user_appliances_#{appliance_key}",
-                              appliance_key.tr("_", " ").split.map(&:capitalize).join(" "),
-                              class: "form-check-label" %>
-              </div>
-            <% end %>
-          </div>
-        </div>
-
-        <!-- Allergies Section -->
+        <!-- Allergies Section (Left/First) -->
         <div class="col-12 col-lg-6">
           <h5 class="mb-3">Allergies</h5>
           <p class="text-muted small mb-3">Select all allergies and intolerances. These ingredients will never appear in your recipes.</p>
@@ -264,6 +234,39 @@
             <% end %>
           </div>
         </div>
+
+        <!-- Appliances Section (Right/Second) -->
+        <div class="col-12 col-lg-6">
+          <h5 class="mb-3">Available Appliances</h5>
+          <p class="text-muted small mb-3">Select all appliances you have access to. Recipes will only use these appliances.</p>
+          
+        <% # Get current appliances (handle both hash and legacy formats)
+           # Set defaults: stove, oven, kettle if appliances is empty
+           default_appliances = %w[stove oven kettle]
+           current_appliances = if @user.appliances.is_a?(Hash) && @user.appliances.any?
+                                     @user.appliances
+                                   else
+                                     # Set defaults for new users or users with empty appliances
+                                     User::STANDARD_APPLIANCES.each_with_object({}) do |a, h|
+                                       h[a] = default_appliances.include?(a)
+                                     end
+                                   end %>
+
+          <div class="d-flex flex-column gap-2">
+            <% User::STANDARD_APPLIANCES.each do |appliance_key| %>
+              <div class="form-check">
+                <%= check_box_tag "user[appliances][#{appliance_key}]",
+                                  1,
+                                  current_appliances[appliance_key.to_s] == true || current_appliances[appliance_key.to_sym] == true,
+                                  id: "user_appliances_#{appliance_key}",
+                                  class: "form-check-input" %>
+                <%= label_tag "user_appliances_#{appliance_key}",
+                              appliance_key.tr("_", " ").split.map(&:capitalize).join(" "),
+                              class: "form-check-label" %>
+              </div>
+            <% end %>
+          </div>
+        </div>
       </div>
 
       <div class="border-top my-4"></div>
@@ -275,7 +278,8 @@
         <%= f.text_area :preferences,
                         rows: 3,
                         class: "form-control",
-                        placeholder: "Example: I want to always use sweetener instead of cane sugar..." %>
+                        placeholder: "Example: I want to always use sweetener instead of cane sugar...",
+                        style: "border-radius: 12px;" %>
       </div>
 
     <% end %>

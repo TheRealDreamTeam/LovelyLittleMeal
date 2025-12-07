@@ -12,6 +12,11 @@ Rails.application.routes.draw do
   get "/settings/edit", to: "users#edit"
   patch "/settings", to: "users#update"
 
+  # Wizard routes for onboarding
+  get "/wizard/:step", to: "wizard#show", as: :wizard
+  patch "/wizard/:step", to: "wizard#update"
+  get "/wizard/:step/skip", to: "wizard#skip", as: :wizard_skip
+
   resources :recipes do
     # Member routes operate on a specific recipe (need :id)
     # Creates: POST /recipes/:id/message
