@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.1].define(version: 2025_12_06_223243) do
+ActiveRecord::Schema[7.1].define(version: 2025_12_07_134906) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -88,12 +88,18 @@ ActiveRecord::Schema[7.1].define(version: 2025_12_06_223243) do
     t.text "system_prompt"
     t.integer "age"
     t.integer "weight"
-    t.boolean "gender"
     t.jsonb "allergies", default: {}
     t.jsonb "appliances", default: {}
+    t.integer "gender", default: 2
+    t.integer "height"
+    t.integer "activity_level"
+    t.integer "goal"
+    t.index ["activity_level"], name: "index_users_on_activity_level"
     t.index ["allergies"], name: "index_users_on_allergies", using: :gin
     t.index ["appliances"], name: "index_users_on_appliances", using: :gin
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["gender"], name: "index_users_on_gender"
+    t.index ["goal"], name: "index_users_on_goal"
     t.index ["reset_password_token"], name: "index_users_on_reset_password_token", unique: true
   end
 

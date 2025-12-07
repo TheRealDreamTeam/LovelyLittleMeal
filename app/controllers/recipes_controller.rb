@@ -899,6 +899,72 @@ class RecipesController < ApplicationController
       TEXT
     end
 
+    # Build physical information and goals section
+    physical_info_parts = []
+    
+    if user.age.present? || user.weight.present? || user.height.present?
+      physical_info_parts << "Physical Information:"
+      physical_info_parts << "- Age: #{user.age} years" if user.age.present?
+      physical_info_parts << "- Weight: #{user.weight} kg" if user.weight.present?
+      physical_info_parts << "- Height: #{user.height} cm" if user.height.present?
+      
+      if user.bmi.present?
+        physical_info_parts << "- BMI: #{user.bmi} (#{user.bmi_category})" if user.bmi_category.present?
+      end
+      
+      if user.bmr.present?
+        physical_info_parts << "- BMR: #{user.bmr} calories/day"
+      end
+      
+      if user.tdee.present?
+        physical_info_parts << "- TDEE: #{user.tdee} calories/day"
+      end
+    end
+
+    if user.goal.present?
+      goal_descriptions = {
+        "lose_weight" => "Weight loss / Fat loss - Focus on lower calorie, nutrient-dense recipes",
+        "maintain_weight" => "Maintain current weight - Focus on balanced, calorie-appropriate recipes",
+        "gain_weight" => "Weight gain - Focus on higher calorie, nutrient-rich recipes",
+        "build_muscle" => "Muscle building / Hypertrophy - Focus on high-protein, calorie-surplus recipes",
+        "recomp" => "Body recomposition (lose fat, gain muscle) - Focus on high-protein, moderate calorie recipes"
+      }
+      
+      goal_description = goal_descriptions[user.goal] || user.goal.humanize
+      physical_info_parts << ""
+      physical_info_parts << "FITNESS GOAL: #{goal_description}"
+      physical_info_parts << "When creating recipes, prioritize ingredients and nutritional profiles that support this goal."
+    end
+
+    if user.activity_level.present?
+      activity_descriptions = {
+        "sedentary" => "Sedentary (little or no exercise) - Lower calorie needs",
+        "lightly_active" => "Lightly active (light exercise 1-3 days/week) - Moderate calorie needs",
+        "moderately_active" => "Moderately active (moderate exercise 3-5 days/week) - Moderate-high calorie needs",
+        "very_active" => "Very active (hard exercise 6-7 days/week) - High calorie needs",
+        "extra_active" => "Extra active (very hard exercise, physical job) - Very high calorie needs"
+      }
+      
+      activity_description = activity_descriptions[user.activity_level] || user.activity_level.humanize
+      physical_info_parts << ""
+      physical_info_parts << "ACTIVITY LEVEL: #{activity_description}"
+      physical_info_parts << "Consider the user's activity level when determining appropriate portion sizes and nutritional needs."
+    end
+
+    if physical_info_parts.any?
+      sections << <<~TEXT
+        PHYSICAL INFORMATION AND FITNESS GOALS:
+        #{physical_info_parts.join("\n")}
+
+        IMPORTANT: Use this physical information to:
+        - Tailor recipe portion sizes appropriately
+        - Adjust nutritional content to support the user's goal
+        - Consider calorie and macronutrient needs based on activity level
+        - Provide recipes that align with their fitness objectives
+        - Make recommendations that support their body composition goals
+      TEXT
+    end
+
     # Build appliances section with strict enforcement
     # Fixed appliance list - any appliance not selected is unavailable
     # Get user appliances (convert hash to array of active appliance keys)

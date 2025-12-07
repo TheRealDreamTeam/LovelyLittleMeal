@@ -40,7 +40,33 @@ class User < ApplicationRecord
   # Treat jsonb appliances column as individual accessors
   store_accessor :appliances, *STANDARD_APPLIANCES
 
-  # Initialize allergies and appliances as empty hash if nil
+  # Gender enum: 0 = male, 1 = female, 2 = prefer_not_to_say
+  enum gender: {
+    male: 0,
+    female: 1,
+    prefer_not_to_say: 2
+  }
+
+  # Activity level enum: Based on exercise frequency and intensity
+  enum activity_level: {
+    sedentary: 0,           # Little or no exercise
+    lightly_active: 1,      # Light exercise 1-3 days/week
+    moderately_active: 2,   # Moderate exercise 3-5 days/week
+    very_active: 3,         # Hard exercise 6-7 days/week
+    extra_active: 4         # Very hard exercise, physical job
+  }
+
+  # Goal enum: Body composition and fitness goals
+  enum goal: {
+    lose_weight: 0,        # Weight loss / fat loss
+    maintain_weight: 1,    # Maintain current weight
+    gain_weight: 2,        # Weight gain
+    build_muscle: 3,       # Muscle building / hypertrophy
+    recomp: 4              # Body recomposition (lose fat, gain muscle)
+  }
+
+  # Initialize allergies and appliances with defaults
+  # Run on create for new users
   before_validation :initialize_allergies, on: :create
   before_validation :initialize_appliances, on: :create
 
@@ -96,6 +122,90 @@ class User < ApplicationRecord
     active_appliances.map { |key| format_appliance_name(key) }
   end
 
+  # Calculates Body Mass Index (BMI)
+  # Formula: BMI = weight (kg) / height (m)²
+  #
+  # @return [Float, nil] BMI value, or nil if height or weight is missing
+  def bmi
+    return nil unless height.present? && weight.present? && height > 0 && weight > 0
+
+    height_in_meters = height / 100.0
+    (weight.to_f / (height_in_meters**2)).round(1)
+  end
+
+  # Calculates Basal Metabolic Rate (BMR) using Mifflin-St Jeor Equation
+  # This is the number of calories your body burns at rest
+  #
+  # Formula:
+  # - Men: BMR = 10 × weight(kg) + 6.25 × height(cm) - 5 × age(years) + 5
+  # - Women: BMR = 10 × weight(kg) + 6.25 × height(cm) - 5 × age(years) - 161
+  #
+  # @return [Float, nil] BMR in calories per day, or nil if required data is missing
+  def bmr
+    return nil unless height.present? && weight.present? && age.present?
+    return nil unless height > 0 && weight > 0 && age > 0
+
+    base_bmr = (10 * weight) + (6.25 * height) - (5 * age)
+
+    # Adjust based on gender (or use average if prefer_not_to_say)
+    case gender
+    when "male"
+      base_bmr + 5
+    when "female"
+      base_bmr - 161
+    else
+      # Use average of male and female formulas if gender not specified
+      ((base_bmr + 5) + (base_bmr - 161)) / 2.0
+    end.round
+  end
+
+  # Calculates Total Daily Energy Expenditure (TDEE)
+  # This is the total number of calories burned per day including activity
+  # Formula: TDEE = BMR × Activity Multiplier
+  #
+  # Activity multipliers:
+  # - Sedentary: 1.2
+  # - Lightly active: 1.375
+  # - Moderately active: 1.55
+  # - Very active: 1.725
+  # - Extra active: 1.9
+  #
+  # @return [Float, nil] TDEE in calories per day, or nil if BMR or activity_level is missing
+  def tdee
+    bmr_value = bmr
+    return nil unless bmr_value.present? && activity_level.present?
+
+    activity_multipliers = {
+      "sedentary" => 1.2,
+      "lightly_active" => 1.375,
+      "moderately_active" => 1.55,
+      "very_active" => 1.725,
+      "extra_active" => 1.9
+    }
+
+    multiplier = activity_multipliers[activity_level] || 1.2
+    (bmr_value * multiplier).round
+  end
+
+  # Gets human-readable BMI category
+  #
+  # @return [String, nil] BMI category or nil if BMI cannot be calculated
+  def bmi_category
+    bmi_value = bmi
+    return nil unless bmi_value
+
+    case bmi_value
+    when 0...18.5
+      "Underweight"
+    when 18.5...25
+      "Normal weight"
+    when 25...30
+      "Overweight"
+    else
+      "Obese"
+    end
+  end
+
   private
 
   # Initialize allergies hash with all standard allergies set to false
@@ -107,12 +217,17 @@ class User < ApplicationRecord
     end
   end
 
-  # Initialize appliances hash with all standard appliances set to false
+  # Initialize appliances hash with defaults: stove, oven, kettle set to true
+  # Sets defaults for new users and existing users who haven't set appliances yet
   def initialize_appliances
-    return if appliances.present?
+    # Only set defaults if appliances is nil or empty (not if user has explicitly set values)
+    return if appliances.present? && appliances.is_a?(Hash) && appliances.any?
+
+    # Default appliances that most users have
+    default_appliances = %w[stove oven kettle]
 
     self.appliances = STANDARD_APPLIANCES.each_with_object({}) do |appliance, hash|
-      hash[appliance] = false
+      hash[appliance] = default_appliances.include?(appliance)
     end
   end
 
