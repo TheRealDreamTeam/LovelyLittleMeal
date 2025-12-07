@@ -1,0 +1,303 @@
+<div class="d-flex flex-column flex-lg-row p-4 gap-4" style="height: 100%; min-height: 0;">
+  <div class="flex-grow-1 d-flex flex-column bg-white overflow-hidden" style="min-height: 0; border-radius: 12px;">
+    <!-- Wizard Header -->
+    <div class="px-3 pt-3 pb-2 border-bottom">
+      <h2 class="mb-2">Welcome! Let's set up your profile</h2>
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <span class="text-muted small">Step <%= @step %> of 4</span>
+        <div class="flex-grow-1" style="height: 4px; background-color: #e9ecef; border-radius: 2px;">
+          <div style="width: <%= (@step / 4.0 * 100) %>%; height: 100%; background-color: #272727; border-radius: 2px; transition: width 0.3s;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wizard Content -->
+    <div class="overflow-y-auto flex-grow-1 px-3 pb-3" style="min-height: 0;">
+      <% if @user.errors.any? %>
+        <div class="alert alert-danger mb-3">
+          <ul class="mb-0">
+            <% @user.errors.full_messages.each do |message| %>
+              <li><%= message %></li>
+            <% end %>
+          </ul>
+        </div>
+      <% end %>
+
+      <%= form_with model: @user, url: wizard_path(step: @step), method: :patch, data: { turbo: false } do |f| %>
+        
+        <% case @step %>
+        <% when 1 %>
+          <!-- Step 1: Physical Basics -->
+          <div class="mb-4">
+            <h4 class="mb-3">Physical Information</h4>
+            <p class="text-muted mb-4">Help us personalize your recipes by providing some basic information.</p>
+
+            <div class="row g-3 mb-3">
+              <!-- Age -->
+              <div class="col-12 col-md-6">
+                <%= f.label :age, "Age", class: "form-label" %>
+                <%= f.number_field :age,
+                      class: "form-control",
+                      placeholder: "E.g. 32",
+                      min: 1,
+                      max: 150,
+                      style: "border-radius: 12px; height: 38px;" %>
+              </div>
+
+              <!-- Weight -->
+              <div class="col-12 col-md-6">
+                <%= f.label :weight, "Weight (kg)", class: "form-label" %>
+                <%= f.number_field :weight,
+                      class: "form-control",
+                      placeholder: "E.g. 68",
+                      min: 1,
+                      max: 500,
+                      step: 0.1,
+                      style: "border-radius: 12px; height: 38px;" %>
+              </div>
+            </div>
+
+            <div class="row g-3 mb-3">
+              <!-- Height -->
+              <div class="col-12 col-md-6">
+                <%= f.label :height, "Height (cm)", class: "form-label" %>
+                <%= f.number_field :height,
+                      class: "form-control",
+                      placeholder: "E.g. 175",
+                      min: 50,
+                      max: 250,
+                      style: "border-radius: 12px; height: 38px;" %>
+              </div>
+
+              <!-- Gender -->
+              <div class="col-12 col-md-6">
+                <%= f.label :gender, "Gender", class: "form-label" %>
+                <div class="d-flex flex-wrap gap-3">
+                  <div class="form-check">
+                    <%= f.radio_button :gender, "male",
+                          id: "user_gender_male",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_gender_male", "Male", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :gender, "female",
+                          id: "user_gender_female",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_gender_female", "Female", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :gender, "prefer_not_to_say",
+                          id: "user_gender_prefer_not_to_say",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_gender_prefer_not_to_say", "Prefer not to say", class: "form-check-label" %>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        <% when 2 %>
+          <!-- Step 2: Activity & Goals -->
+          <div class="mb-4">
+            <h4 class="mb-3">Activity Level & Fitness Goal</h4>
+            <p class="text-muted mb-4">Tell us about your lifestyle and fitness goals to help us tailor your recipes.</p>
+
+            <div class="row g-4">
+              <!-- Activity Level -->
+              <div class="col-12 col-lg-6">
+                <%= f.label :activity_level, "Activity Level", class: "form-label" %>
+                <div class="d-flex flex-column gap-2">
+                  <div class="form-check">
+                    <%= f.radio_button :activity_level, "sedentary",
+                          id: "user_activity_level_sedentary",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_activity_level_sedentary", "Sedentary (little or no exercise)", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :activity_level, "lightly_active",
+                          id: "user_activity_level_lightly_active",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_activity_level_lightly_active", "Lightly active (light exercise 1-3 days/week)", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :activity_level, "moderately_active",
+                          id: "user_activity_level_moderately_active",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_activity_level_moderately_active", "Moderately active (moderate exercise 3-5 days/week)", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :activity_level, "very_active",
+                          id: "user_activity_level_very_active",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_activity_level_very_active", "Very active (hard exercise 6-7 days/week)", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :activity_level, "extra_active",
+                          id: "user_activity_level_extra_active",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_activity_level_extra_active", "Extra active (very hard exercise, physical job)", class: "form-check-label" %>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Goal -->
+              <div class="col-12 col-lg-6">
+                <%= f.label :goal, "Fitness Goal", class: "form-label" %>
+                <div class="d-flex flex-column gap-2">
+                  <div class="form-check">
+                    <%= f.radio_button :goal, "lose_weight",
+                          id: "user_goal_lose_weight",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_goal_lose_weight", "Lose weight", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :goal, "maintain_weight",
+                          id: "user_goal_maintain_weight",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_goal_maintain_weight", "Maintain weight", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :goal, "gain_weight",
+                          id: "user_goal_gain_weight",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_goal_gain_weight", "Gain weight", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :goal, "build_muscle",
+                          id: "user_goal_build_muscle",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_goal_build_muscle", "Build muscle", class: "form-check-label" %>
+                  </div>
+
+                  <div class="form-check">
+                    <%= f.radio_button :goal, "recomp",
+                          id: "user_goal_recomp",
+                          class: "form-check-input" %>
+                    <%= label_tag "user_goal_recomp", "Body recomposition (lose fat, gain muscle)", class: "form-check-label" %>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        <% when 3 %>
+          <!-- Step 3: Dietary Needs -->
+          <div class="mb-4">
+            <h4 class="mb-3">Dietary Needs</h4>
+            <p class="text-muted mb-4">Let us know about any allergies or dietary preferences.</p>
+
+            <div class="row g-4 mb-4">
+              <!-- Allergies -->
+              <div class="col-12 col-lg-6">
+                <h5 class="mb-3">Allergies</h5>
+                <p class="text-muted small mb-3">Select all allergies and intolerances. These ingredients will never appear in your recipes.</p>
+
+                <% allergy_options = {
+                     "peanut" => "Peanut",
+                     "tree_nuts" => "Tree nuts",
+                     "sesame" => "Sesame",
+                     "shellfish" => "Shellfish",
+                     "milk" => "Milk",
+                     "egg" => "Egg",
+                     "fish" => "Fish",
+                     "wheat" => "Wheat",
+                     "soy" => "Soy",
+                     "kiwi" => "Kiwi"
+                   } %>
+
+                <% current_allergies = if @user.allergies.is_a?(Hash)
+                                         @user.allergies
+                                       else
+                                         User::STANDARD_ALLERGIES.each_with_object({}) { |a, h| h[a] = false }
+                                       end %>
+
+                <div class="d-flex flex-column gap-2">
+                  <% allergy_options.each do |key, label| %>
+                    <div class="form-check">
+                      <%= check_box_tag "user[allergies][#{key}]",
+                                        1,
+                                        current_allergies[key.to_s] == true || current_allergies[key.to_sym] == true,
+                                        id: "user_allergies_#{key}",
+                                        class: "form-check-input" %>
+                      <%= label_tag "user_allergies_#{key}",
+                                    label,
+                                    class: "form-check-label" %>
+                    </div>
+                  <% end %>
+                </div>
+              </div>
+
+              <!-- Preferences -->
+              <div class="col-12 col-lg-6">
+                <h5 class="mb-3">Cooking Preferences</h5>
+                <p class="text-muted small mb-3">Any specific cooking preferences or dietary requirements (optional).</p>
+                <%= f.text_area :preferences,
+                                rows: 6,
+                                class: "form-control",
+                                placeholder: "Example: I want to always use sweetener instead of cane sugar...",
+                                style: "border-radius: 12px;" %>
+              </div>
+            </div>
+          </div>
+
+        <% when 4 %>
+          <!-- Step 4: Kitchen Equipment -->
+          <div class="mb-4">
+            <h4 class="mb-3">Kitchen Equipment</h4>
+            <p class="text-muted mb-4">Select all appliances you have access to. Recipes will only use these appliances.</p>
+
+            <% # Get current appliances (handle both hash and legacy formats)
+               default_appliances = %w[stove oven kettle]
+               current_appliances = if @user.appliances.is_a?(Hash) && @user.appliances.any?
+                                         @user.appliances
+                                       else
+                                         User::STANDARD_APPLIANCES.each_with_object({}) do |a, h|
+                                           h[a] = default_appliances.include?(a)
+                                         end
+                                       end %>
+
+            <div class="d-flex flex-column gap-2">
+              <% User::STANDARD_APPLIANCES.each do |appliance_key| %>
+                <div class="form-check">
+                  <%= check_box_tag "user[appliances][#{appliance_key}]",
+                                    1,
+                                    current_appliances[appliance_key.to_s] == true || current_appliances[appliance_key.to_sym] == true,
+                                    id: "user_appliances_#{appliance_key}",
+                                    class: "form-check-input" %>
+                  <%= label_tag "user_appliances_#{appliance_key}",
+                                appliance_key.tr("_", " ").split.map(&:capitalize).join(" "),
+                                class: "form-check-label" %>
+                </div>
+              <% end %>
+            </div>
+          </div>
+
+        <% end %>
+
+        <!-- Wizard Navigation Buttons -->
+        <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top">
+          <div>
+            <% if @step > 1 %>
+              <%= link_to "Back", wizard_path(step: @step - 1), class: "btn btn-outline-secondary", style: "border-radius: 12px; height: 38px; padding: 0.375rem 1.5rem;" %>
+            <% end %>
+          </div>
+          <div class="d-flex gap-2">
+            <%= link_to "Skip", wizard_skip_path(step: @step), class: "btn btn-outline-secondary", style: "border-radius: 12px; height: 38px; padding: 0.375rem 1.5rem;" %>
+            <%= f.submit @step == 4 ? "Complete" : "Next", class: "btn btn-primary", style: "border-radius: 12px; height: 38px; padding: 0.375rem 1.5rem;" %>
+          </div>
+        </div>
+
+      <% end %>
+    </div>
+  </div>
+</div>
+
