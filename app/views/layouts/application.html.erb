@@ -49,7 +49,7 @@
     
     <meta property="og:type" content="<%= content_for?(:og_type) ? content_for(:og_type) : 'website' %>">
     <meta property="og:url" content="<%= request.original_url %>">
-    <meta property="og:title" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal - Personalized Recipe Generator' %>">
+    <meta property="og:title" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal - Personal Recipes' %>">
     <meta property="og:description" content="<%= content_for?(:og_description) ? content_for(:og_description) : 'Personalized recipes for every occasion!' %>">
     <meta property="og:image" content="<%= og_image %>">
     <meta property="og:image:width" content="1200">
@@ -60,7 +60,7 @@
     
     <%# Twitter Card tags %>
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal - Personalized Recipe Generator' %>">
+    <meta name="twitter:title" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal - Personal Recipes' %>">
     <meta name="twitter:description" content="<%= content_for?(:og_description) ? content_for(:og_description) : 'Personalized recipes for every occasion!' %>">
     <meta name="twitter:image" content="<%= og_image %>">
     <meta name="twitter:image:alt" content="<%= content_for?(:og_title) ? content_for(:og_title) : 'LovelyLittleMeal' %>">
@@ -72,7 +72,7 @@
     <%# JavaScript %>
     <%= javascript_importmap_tags %>
   </head>
-  <body class="d-flex flex-column" style="height: 100vh; overflow: hidden;">
+  <body class="d-flex flex-column" style="height: 100dvh; overflow: hidden;">
     <%= link_to "Skip to main content", "#main-content", class: "visually-hidden-focusable" %>
     <header class="flex-shrink-0">
       <%= render "shared/navbar" %>
