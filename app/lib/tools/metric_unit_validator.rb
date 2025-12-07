@@ -149,14 +149,15 @@ module Tools
       # Try each known unit to find a match
       UNIT_CONVERSIONS.each do |unit_key, conversion_factor|
         # Create regex pattern for this unit (handle spaces in multi-word units)
+        # Handles: "1", "1.5", "1/2", "3/4", etc.
         unit_pattern = unit_key.gsub(/\s+/, '\s+')
-        pattern = /^(\d+(?:\.\d+)?)\s+#{unit_pattern}(?:\s+|$)/i
+        pattern = /^(\d+(?:\/\d+)?(?:\.\d+)?|\d+\/\d+)\s+#{unit_pattern}(?:\s+|$)/i
         
         if ingredient.match?(pattern)
-          match = ingredient.match(/^(\d+(?:\.\d+)?)\s+#{unit_pattern}\s*(.*)/i)
+          match = ingredient.match(/^(\d+(?:\/\d+)?(?:\.\d+)?|\d+\/\d+)\s+#{unit_pattern}\s*(.*)/i)
           next unless match
 
-          amount = match[1].to_f
+          amount = parse_fraction(match[1])
           remaining_text = (match[2] || "").strip
 
           # Determine if it's volume or weight based on ingredient type
@@ -227,9 +228,10 @@ module Tools
       item_lower = item.downcase
       has_processed = PROCESSED_INDICATORS.any? { |indicator| item_lower.include?(indicator) }
       
-      if has_processed
+        if has_processed
         # Extract amount and unit first (if present) - include all possible units
-        amount_match = item.match(/^(\d+(?:\.\d+)?)\s*(g|ml|pieces?|heads?|bulbs?|loaves?|rolls?|teaspoons?|tsp|tablespoons?|tbsp|cloves?|slices?|leaves?)\s+(.+)/i)
+        # Handles: "1", "1.5", "1/2", "3/4", etc.
+        amount_match = item.match(/^(\d+(?:\/\d+)?(?:\.\d+)?|\d+\/\d+)\s*(g|ml|pieces?|heads?|bulbs?|loaves?|rolls?|teaspoons?|tsp|tablespoons?|tbsp|cloves?|slices?|leaves?)\s+(.+)/i)
         
         if amount_match
           # Has amount - clean the item name part
@@ -303,8 +305,9 @@ module Tools
       end
 
       # Extract number and unit from item string
-      # Pattern: amount (number) + unit (g/ml/pieces/etc) + item name
-      match = item.match(/^(\d+(?:\.\d+)?)\s*(g|ml|pieces?|heads?|bulbs?|cloves?|slices?|leaves?|teaspoons?|tsp|tablespoons?|tbsp|pinches?|dashes?)\s+(.+)/i)
+      # Pattern: amount (number, decimal, or fraction like "1/2") + unit (g/ml/pieces/etc) + item name
+      # Handles: "1", "1.5", "1/2", "3/4", etc.
+      match = item.match(/^(\d+(?:\/\d+)?(?:\.\d+)?|\d+\/\d+)\s*(g|ml|pieces?|heads?|bulbs?|cloves?|slices?|leaves?|teaspoons?|tsp|tablespoons?|tbsp|pinches?|dashes?)\s+(.+)/i)
       
       if match
         amount_str = match[1]
@@ -323,8 +326,8 @@ module Tools
           }
         end
 
-        # Extract numeric amount
-        amount = amount_str.to_f
+        # Extract numeric amount (handle fractions like "1/2" -> 0.5)
+        amount = parse_fraction(amount_str)
 
         # Check for unrealistic small amounts
         # For spices, condiments, baking items, and sweeteners, even small amounts in grams/ml are unrealistic
@@ -601,6 +604,29 @@ module Tools
       instructions << "4. For spices, use realistic container sizes or just the spice name"
 
       instructions.join("\n")
+    end
+
+    # Parses amount string that may contain fractions (e.g., "1/2" -> 0.5)
+    #
+    # @param amount_str [String] Amount string (e.g., "1", "1.5", "1/2", "3/4")
+    # @return [Float] Numeric value
+    def self.parse_fraction(amount_str)
+      return 0.0 if amount_str.nil? || amount_str.empty?
+
+      # Check if it's a fraction (e.g., "1/2", "3/4")
+      if amount_str.include?("/")
+        parts = amount_str.split("/")
+        return 0.0 if parts.length != 2
+
+        numerator = parts[0].to_f
+        denominator = parts[1].to_f
+        return 0.0 if denominator.zero?
+
+        numerator / denominator
+      else
+        # Regular number or decimal
+        amount_str.to_f
+      end
     end
   end
 end

@@ -30,52 +30,69 @@ class RecipeValidator
     unavailable_appliances: [],
     user_allergies: []
   )
+    validation_start = Time.current
+    Rails.logger.info("RecipeValidator: Starting parallel validation of all 6 validators...")
+    
+    # Initialize results hash outside Async block so it's accessible after completion
+    results = {}
+    
     Async do |task|
       # Run all validations in parallel
       # Each validation runs in its own async task
-      results = {}
 
       # Allergen warning validation (pure Ruby - fast)
       task.async do
+        start_time = Time.current
         results[:allergen_warning] = validate_allergen_warnings(
           recipe_data,
           user_message,
           requested_ingredients,
           user_allergies
         )
+        Rails.logger.debug("RecipeValidator: AllergenWarningValidator completed in #{(Time.current - start_time) * 1000}ms")
       end
 
       # Ingredient allergy check (pure Ruby - fast)
       task.async do
+        start_time = Time.current
         results[:ingredient_allergy] = validate_ingredient_allergies(
           recipe_data,
           user_allergies,
           user_message
         )
+        Rails.logger.debug("RecipeValidator: IngredientAllergyChecker completed in #{(Time.current - start_time) * 1000}ms")
       end
 
       # Metric unit validation (pure Ruby - fast)
       task.async do
+        start_time = Time.current
         results[:metric_unit] = validate_metric_units(recipe_data)
+        Rails.logger.debug("RecipeValidator: MetricUnitValidator completed in #{(Time.current - start_time) * 1000}ms")
       end
 
       # Appliance compatibility check (LLM - slower)
       task.async do
+        start_time = Time.current
         results[:appliance] = validate_appliance_compatibility(
           recipe_data,
           available_appliances,
           unavailable_appliances
         )
+        Rails.logger.debug("RecipeValidator: ApplianceCompatibilityChecker completed in #{(Time.current - start_time) * 1000}ms")
       end
 
       # Recipe completeness check (LLM - slower)
       task.async do
+        start_time = Time.current
         results[:completeness] = validate_recipe_completeness(recipe_data)
+        Rails.logger.debug("RecipeValidator: RecipeCompletenessChecker completed in #{(Time.current - start_time) * 1000}ms")
       end
 
       # Preference compliance check (LLM - slower)
       task.async do
+        start_time = Time.current
         results[:preference] = validate_preference_compliance(recipe_data, user)
+        Rails.logger.debug("RecipeValidator: PreferenceComplianceChecker completed in #{(Time.current - start_time) * 1000}ms")
       end
 
       # Wait for all validations to complete
@@ -84,6 +101,20 @@ class RecipeValidator
 
     # Aggregate all results
     aggregated = aggregate_results(results)
+    
+    # Log validation summary
+    total_time = (Time.current - validation_start) * 1000
+    violation_count = aggregated[:violations]&.length || 0
+    Rails.logger.info("RecipeValidator: All 6 validations completed in #{total_time.round(2)}ms")
+    Rails.logger.info("RecipeValidator: Found #{violation_count} violation(s) across all validators")
+    
+    if violation_count > 0
+      Rails.logger.info("RecipeValidator: Violation breakdown:")
+      results.each do |key, result|
+        next unless result&.respond_to?(:violations) && result.violations&.any?
+        Rails.logger.info("  - #{key}: #{result.violations.length} violation(s)")
+      end
+    end
     
     # Also return individual results for cases where we need specific data (e.g., converted_data from metric unit validator)
     aggregated[:individual_results] = results
