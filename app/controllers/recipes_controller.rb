@@ -67,9 +67,7 @@ class RecipesController < ApplicationController
       )
     end
 
-    if params[:favorites] == "1"
-      @recipes = @recipes.where(favorite: true)
-    end
+    @recipes = @recipes.where(favorite: true) if params[:favorites] == "1"
 
     respond_to do |format|
       format.html
@@ -223,7 +221,7 @@ class RecipesController < ApplicationController
     # Use gpt-4o for recipe generation to ensure reliable structured output
     # Tools use faster gpt-4.1-nano models, but recipe generation needs the full model
     chat_setup_start = Time.current
-    ruby_llm_chat = RubyLLM.chat(model: "gpt-4.1-nano")
+    ruby_llm_chat = RubyLLM.chat(model: "gpt-4o")
                            .with_instructions(system_prompt(current_user) + system_prompt_addition(chat.recipe))
                            .with_schema(RecipeSchema)
     timings[:chat_setup] = (Time.current - chat_setup_start) * 1000
@@ -249,13 +247,22 @@ class RecipesController < ApplicationController
     Rails.logger.info("LLM Response has content: #{response.key?('content')}")
 
     # Phase 4: Validation & Auto-Fix
-    # Validate recipe (allergen warnings, appliance compatibility) and automatically fix violations if recipe was modified
+    # Validate recipe (allergen warnings, ingredient allergies, metric units, appliance compatibility,
+    # recipe completeness, preference compliance) and automatically fix violations
+    # We validate whenever there's recipe data to validate (new recipes OR modified recipes)
+    # recipe_modified can be false for new recipes, but we still need to validate them
     validation_start = Time.current
-    if [true, "true"].include?(response["recipe_modified"])
-      # Validate and fix violations automatically
+    has_recipe_data = response.key?("title") || response.key?(:title) ||
+                      (response.dig("content", "ingredients")&.any? || response.dig(:content, :ingredients)&.any?)
+
+    if has_recipe_data
+      # Validate and fix violations automatically (for both new and modified recipes)
+      Rails.logger.info("Recipe validation: Recipe data detected, running validation (recipe_modified: #{response['recipe_modified']})")
       response = validate_recipe(response, user_message, ruby_llm_chat)
+    else
+      Rails.logger.info("Recipe validation: No recipe data detected, skipping validation")
     end
-    timings[:allergen_validation] = (Time.current - validation_start) * 1000
+    timings[:validation_phase] = (Time.current - validation_start) * 1000
 
     # Phase 5: Message Formatting
     # DISABLED: MessageFormatter takes ~2 seconds, messages were working fine without it
@@ -290,7 +297,7 @@ class RecipesController < ApplicationController
     Rails.logger.info("  Chat Setup:                    #{timings[:chat_setup].round(2)}ms")
     Rails.logger.info("  Conversation History Building: #{timings[:conversation_history_building].round(2)}ms")
     Rails.logger.info("  LLM Recipe Generation:        #{timings[:llm_recipe_generation].round(2)}ms (#{(timings[:llm_recipe_generation] / total_time * 100).round(1)}% of total)")
-    Rails.logger.info("  Allergen Validation:           #{timings[:allergen_validation].round(2)}ms")
+    Rails.logger.info("  Validation Phase (All 6):      #{timings[:validation_phase].round(2)}ms")
     # Rails.logger.info("  Message Formatting:            #{timings[:message_formatting].round(2)}ms") # DISABLED
     Rails.logger.info("  " + ("-" * 78))
     Rails.logger.info("  TOTAL TIME:                    #{total_time.round(2)}ms")
@@ -906,24 +913,20 @@ class RecipesController < ApplicationController
 
     # Build physical information and goals section
     physical_info_parts = []
-    
+
     if user.age.present? || user.weight.present? || user.height.present?
       physical_info_parts << "Physical Information:"
       physical_info_parts << "- Age: #{user.age} years" if user.age.present?
       physical_info_parts << "- Weight: #{user.weight} kg" if user.weight.present?
       physical_info_parts << "- Height: #{user.height} cm" if user.height.present?
-      
-      if user.bmi.present?
-        physical_info_parts << "- BMI: #{user.bmi} (#{user.bmi_category})" if user.bmi_category.present?
+
+      if user.bmi.present? && user.bmi_category.present?
+        physical_info_parts << "- BMI: #{user.bmi} (#{user.bmi_category})"
       end
-      
-      if user.bmr.present?
-        physical_info_parts << "- BMR: #{user.bmr} calories/day"
-      end
-      
-      if user.tdee.present?
-        physical_info_parts << "- TDEE: #{user.tdee} calories/day"
-      end
+
+      physical_info_parts << "- BMR: #{user.bmr} calories/day" if user.bmr.present?
+
+      physical_info_parts << "- TDEE: #{user.tdee} calories/day" if user.tdee.present?
     end
 
     if user.goal.present?
@@ -934,7 +937,7 @@ class RecipesController < ApplicationController
         "build_muscle" => "Muscle building / Hypertrophy - Focus on high-protein, calorie-surplus recipes",
         "recomp" => "Body recomposition (lose fat, gain muscle) - Focus on high-protein, moderate calorie recipes"
       }
-      
+
       goal_description = goal_descriptions[user.goal] || user.goal.humanize
       physical_info_parts << ""
       physical_info_parts << "FITNESS GOAL: #{goal_description}"
@@ -949,7 +952,7 @@ class RecipesController < ApplicationController
         "very_active" => "Very active (hard exercise 6-7 days/week) - High calorie needs",
         "extra_active" => "Extra active (very hard exercise, physical job) - Very high calorie needs"
       }
-      
+
       activity_description = activity_descriptions[user.activity_level] || user.activity_level.humanize
       physical_info_parts << ""
       physical_info_parts << "ACTIVITY LEVEL: #{activity_description}"
