@@ -24,3 +24,14 @@
   pointer-events: none;
 }
 
+// Hide burger button on auth pages, landing page, and wizard
+// Using body class prevents flash of content (FOUC)
+// CSS is applied immediately when page loads, before inline styles
+// Use opacity: 0 to maintain navbar height and layout while preventing flash
+body.hide-navbar-burger .navbar-toggler {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  // opacity: 0 maintains layout space (unlike display: none)
+  // and prevents flash better than visibility: hidden
+}
+
