@@ -36,9 +36,15 @@ class UsersController < ApplicationController
     end
 
     if @user.update(permitted)
-      redirect_to recipes_path, notice: "Settings updated"
+      respond_to do |format|
+        format.turbo_stream
+        format.html { redirect_to recipes_path, notice: "Settings updated" }
+      end
     else
-      render :edit, status: :unprocessable_entity
+      respond_to do |format|
+        format.turbo_stream { render :edit, status: :unprocessable_entity }
+        format.html { render :edit, status: :unprocessable_entity }
+      end
     end
   end
 
@@ -52,7 +58,10 @@ class UsersController < ApplicationController
       :system_prompt,
       :age,
       :weight,
-      :gender
+      :height,
+      :gender,
+      :activity_level,
+      :goal
     )
 
     # Permit appliances hash with all standard appliance keys

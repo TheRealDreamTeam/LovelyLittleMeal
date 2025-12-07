@@ -23,11 +23,11 @@ module Tools
     # @param user_preferences [String, nil] User's preferences text (free-form)
     # @param user_age [Integer, nil] User's age
     # @param user_weight [Integer, nil] User's weight in kg
-    # @param user_gender [Boolean, nil] User's gender (true = male, false = female)
+    # @param user_gender [String, nil] User's gender ("male", "female", or "prefer_not_to_say")
     # @return [ValidationResult] Validation result with violations and fix instructions
     def self.validate(recipe_data:, user_preferences: nil, user_age: nil, user_weight: nil, user_gender: nil)
       # If no preferences specified, recipe is automatically compliant
-      return BaseTool.validation_result(valid: true, violations: []) if user_preferences.blank? && user_age.nil? && user_weight.nil? && user_gender.nil?
+      return BaseTool.validation_result(valid: true, violations: []) if user_preferences.blank? && user_age.nil? && user_weight.nil? && user_gender.blank?
 
       # Extract recipe information for analysis
       recipe_info = extract_recipe_info(recipe_data)
@@ -150,11 +150,14 @@ module Tools
         parts << ""
       end
 
-      if user_age || user_weight || !user_gender.nil?
+      if user_age || user_weight || user_gender.present?
         parts << "User Physical Information:"
         parts << "Age: #{user_age}" if user_age
         parts << "Weight: #{user_weight} kg" if user_weight
-        parts << "Gender: #{user_gender ? 'Male' : 'Female'}" unless user_gender.nil?
+        if user_gender.present? && user_gender != "prefer_not_to_say"
+          gender_display = user_gender == "male" ? "Male" : "Female"
+          parts << "Gender: #{gender_display}"
+        end
         parts << ""
       end
 
