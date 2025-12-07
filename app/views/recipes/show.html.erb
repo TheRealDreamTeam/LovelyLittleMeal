@@ -19,8 +19,38 @@
 <% end %>
 
 <% left_content = capture do %>
+  <%# Recipe Header - Sticky, doesn't scroll %>
+  <div id="recipe-header" class="flex-shrink-0 border-bottom bg-white" style="position: sticky; top: 0; z-index: 10;">
+    <div class="p-2">
+      <div class="d-flex align-items-center gap-2 mb-2">
+        <h2 class="mb-0"><%= @recipe.title || "Untitled" %></h2>
+
+        <span id="favorite-toggle-<%= @recipe.id %>">
+          <%= button_to toggle_favorite_recipe_path(@recipe),
+                        method: :patch,
+                        class: "btn p-0 border-0 bg-transparent favorite-button",
+                        form_class: "d-inline" do %>
+            <i class="bi <%= @recipe.favorite? ? 'bi-star-fill text-warning' : 'bi-star' %> fs-3"></i>
+          <% end %>
+        </span>
+
+        <%= button_to recipe_path(@recipe),
+                      method: :delete,
+                      data: { turbo_confirm: "Delete this recipe?" },
+                      class: "btn p-0 border-0 bg-transparent icon-button",
+                      form_class: "d-inline" do %>
+          <i class="bi bi-trash fs-3 text-dark"></i>
+        <% end %>
+      </div>
+    </div>
+  </div>
+  
+  <%# Recipe Content - Scrollable %>
   <div id="recipe-details" class="overflow-y-auto flex-grow-1" style="min-height: 0;">
-    <%= render "recipes/details", recipe: @recipe %>
+    <% if @recipe.description.present? && @recipe.description != "Nothing here yet..." %>
+      <p class="text-muted lead mb-0"><%= @recipe.description %></p>
+    <% end %>
+    <%= render "recipes/details", recipe: @recipe, skip_header: true %>
   </div>
 <% end %>
 

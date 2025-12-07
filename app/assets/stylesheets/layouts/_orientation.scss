@@ -1,0 +1,63 @@
+// Orientation handling - optimize for portrait mode
+// This ensures the layout works best in portrait orientation on all devices
+
+// Base styles optimized for portrait orientation
+// Portrait is the default and preferred orientation
+
+// Landscape mode adjustments
+// When device is rotated to landscape, adjust layout to maintain usability
+@media (orientation: landscape) and (max-height: 600px) {
+  // On small landscape screens (like phones in landscape), adjust spacing
+  body {
+    // Reduce padding/margins to fit more content
+    font-size: 0.9rem;
+  }
+  
+  // Adjust navbar height in landscape
+  #navbar {
+    padding-top: 0.5rem !important;
+    padding-bottom: 0.5rem !important;
+  }
+  
+  // Adjust recipe details container in landscape
+  .recipe-details-container {
+    // In landscape with chat, give more space to recipe details
+    @media (max-width: 991.98px) {
+      flex: 0 1 55% !important; // Slightly less than portrait to fit landscape better
+    }
+  }
+  
+  // Adjust two-column layout spacing in landscape
+  .d-flex.flex-column.flex-lg-row {
+    padding: 0.75rem !important;
+    gap: 0.75rem !important;
+  }
+}
+
+// Portrait mode optimizations (default)
+@media (orientation: portrait) {
+  // Ensure full height is used in portrait
+  body {
+    height: 100dvh;
+  }
+  
+  // Optimize spacing for portrait
+  .d-flex.flex-column.flex-lg-row {
+    padding: 1rem;
+    gap: 1rem;
+  }
+}
+
+// Prevent layout issues when rotating
+// Use smooth transitions for orientation changes
+* {
+  transition: none; // Disable transitions during orientation change to prevent layout shifts
+}
+
+// Re-enable transitions after orientation change
+@media (prefers-reduced-motion: no-preference) {
+  * {
+    transition: all 0.2s ease-in-out;
+  }
+}
+

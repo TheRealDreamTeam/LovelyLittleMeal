@@ -80,4 +80,12 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # Allow ngrok hosts for development tunneling
+  # This allows requests from ngrok tunnels which have dynamic hostnames
+  # Pattern matches any ngrok-free.dev or ngrok.io subdomain
+  config.hosts << /.*\.ngrok-free\.dev/
+  config.hosts << /.*\.ngrok\.io/
+  # Also allow the specific host mentioned in the error
+  config.hosts << "recrudescent-undichotomously-jo.ngrok-free.dev"
 end
