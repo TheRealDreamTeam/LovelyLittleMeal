@@ -3,7 +3,9 @@
   <head>
     <%# Basic Meta Tags %>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no, user-scalable=no">
+    <%# Suggest portrait orientation for better UX (doesn't force, but hints to browser) %>
+    <meta name="screen-orientation" content="portrait">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title><%= content_for?(:title) ? "#{content_for(:title)} | LovelyLittleMeal" : "LovelyLittleMeal" %></title>
     
@@ -72,7 +74,7 @@
     <%# JavaScript %>
     <%= javascript_importmap_tags %>
   </head>
-  <body class="d-flex flex-column" style="height: 100dvh; overflow: hidden;">
+  <body class="d-flex flex-column" style="height: 100dvh; overflow: hidden;" data-controller="orientation">
     <%= link_to "Skip to main content", "#main-content", class: "visually-hidden-focusable" %>
     <header class="flex-shrink-0">
       <%= render "shared/navbar" %>

@@ -7,18 +7,19 @@
 %>
 
 <% right_attributes ||= {} %>
+<% has_right_column = right_content.present? %>
 
-<div class="d-flex flex-column flex-lg-row p-4 gap-4" style="height: 100%; min-height: 0;">
-  <%# Left section - on mobile, limit height to give chat more space %>
-  <div class="flex-grow-1 d-flex flex-column bg-white p-3 overflow-hidden recipe-details-container" style="min-height: 0; border-radius: 12px;">
+<div class="d-flex flex-column flex-lg-row p-2 gap-2 <%= 'has-right-column' if has_right_column %>" style="height: 100%; min-height: 0;">
+  <%# Left section - full width when no right column, limited on mobile when right column exists %>
+  <div class="flex-grow-1 d-flex flex-column bg-white p-2 overflow-hidden recipe-details-container <%= 'recipe-details-container-full' unless has_right_column %>" style="min-height: 0; border-radius: 12px;">
     <%= left_content %>
   </div>
 
   <%# Right section - only render if content is present %>
-  <% if right_content.present? %>
+  <% if has_right_column %>
     <% right_div_attrs = {
       style: "min-width: 450px; width: 450px; max-width: 450px; border-radius: 12px;",
-      class: "d-flex flex-column bg-white p-3 overflow-hidden chat-container"
+      class: "d-flex flex-column bg-white p-2 overflow-hidden chat-container"
     }.merge(right_attributes || {}) %>
 
     <%= content_tag :div, right_content, right_div_attrs %>
