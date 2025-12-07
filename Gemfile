@@ -92,4 +92,4 @@ gem "async", "~> 2.0"
 
 # Cloudinary for image storage and processing (ActiveStorage)
 gem "cloudinary", "~> 1.25"
-gem "activestorage-cloudinary-service", "~> 1.0"
+gem "activestorage-cloudinary-service", "~> 0.2"
