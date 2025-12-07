@@ -14,7 +14,7 @@ module ApplicationHelper
 
   # Generates absolute URL for files in public directory (required for OG tags)
   #
-  # @param path [String] Path relative to public directory (e.g., "llm-og-logo.jpg")
+  # @param path [String] Path relative to public directory (e.g., "llm-og-logo.svg")
   # @return [String] Absolute URL to the file
   def public_file_url(path)
     # Remove leading slash if present

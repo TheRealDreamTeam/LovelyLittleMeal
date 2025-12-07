@@ -46,7 +46,7 @@
     
     <%# Open Graph / Facebook / Twitter meta tags for social sharing %>
     <%# Default OG image: LLM logo for chat/social sharing %>
-    <% default_og_image = public_file_url('llm-og-logo.jpg') %>
+    <% default_og_image = public_file_url('llm-og-logo.svg') %>
     <% og_image = content_for?(:og_image) ? content_for(:og_image) : default_og_image %>
     
     <meta property="og:type" content="<%= content_for?(:og_type) ? content_for(:og_type) : 'website' %>">
