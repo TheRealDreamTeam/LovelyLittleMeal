@@ -14,8 +14,8 @@
   <%# Use absolute URL for OG tags (works with both local storage and Cloudinary) %>
   <% content_for :og_image, absolute_url_for(@recipe.image) %>
 <% else %>
-  <%# Fallback to app logo if no recipe image %>
-  <% content_for :og_image, "https://res.cloudinary.com/dao1vxhsu/image/upload/v1764934638/logo_no_background_aszsab.png" %>
+  <%# Fallback to LLM OG logo if no recipe image %>
+  <% content_for :og_image, public_file_url('llm-og-logo.jpg') %>
 <% end %>
 
 <% left_content = capture do %>

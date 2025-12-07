@@ -43,7 +43,9 @@
     <link rel="dns-prefetch" href="https://cdn.jsdelivr.net">
     
     <%# Open Graph / Facebook / Twitter meta tags for social sharing %>
-    <% og_image = content_for?(:og_image) ? content_for(:og_image) : 'https://res.cloudinary.com/dao1vxhsu/image/upload/v1764934638/logo_no_background_aszsab.png' %>
+    <%# Default OG image: LLM logo for chat/social sharing %>
+    <% default_og_image = public_file_url('llm-og-logo.jpg') %>
+    <% og_image = content_for?(:og_image) ? content_for(:og_image) : default_og_image %>
     
     <meta property="og:type" content="<%= content_for?(:og_type) ? content_for(:og_type) : 'website' %>">
     <meta property="og:url" content="<%= request.original_url %>">
